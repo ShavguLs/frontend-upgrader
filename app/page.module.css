@@ -312,6 +312,76 @@
   font-size: 14px;
 }
 
+.catalogFilters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.filterField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 140px;
+}
+
+.filterFieldSearch {
+  flex: 2;
+  min-width: 200px;
+}
+
+.filterField label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.filterInput {
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 14px;
+  background: #fafafa;
+  color: inherit;
+  width: 100%;
+}
+
+.filterInput:focus {
+  outline: 2px solid #1b2838;
+  outline-offset: 1px;
+}
+
+.filterActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.filterActions .actionButton {
+  width: auto;
+  padding: 8px 18px;
+}
+
+.filterClearButton {
+  background: transparent;
+  color: #666;
+  border: 1px solid #ccc;
+}
+
+.filterClearButton:hover:not(:disabled) {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.filterError {
+  margin-bottom: 14px;
+}
+
 @media (prefers-color-scheme: dark) {
   .card {
     border-color: #2d2d2d;
@@ -344,6 +414,30 @@
 
   .skinImagePlaceholder {
     color: #aaa;
+  }
+
+  .filterField label {
+    color: #aaa;
+  }
+
+  .filterInput {
+    border-color: #3a3a3a;
+    background: #1c1c1c;
+    color: #eee;
+  }
+
+  .filterInput:focus {
+    outline-color: #4e8ab5;
+  }
+
+  .filterClearButton {
+    color: #aaa;
+    border-color: #444;
+  }
+
+  .filterClearButton:hover:not(:disabled) {
+    background: #222;
+    color: #eee;
   }
 
   .skinMetaGrid {
@@ -427,5 +521,22 @@
 
   .skinGrid {
     grid-template-columns: 1fr;
+  }
+
+  .catalogFilters {
+    flex-direction: column;
+  }
+
+  .filterField {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .filterActions {
+    width: 100%;
+  }
+
+  .filterActions .actionButton {
+    flex: 1;
   }
 }

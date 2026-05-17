@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 
@@ -166,6 +166,7 @@ export default function Home() {
   >(null);
   const [skinsLoading, setSkinsLoading] = useState(true);
   const [skinsError, setSkinsError] = useState<string | null>(null);
+  const skinsRequestId = useRef(0);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
@@ -173,6 +174,11 @@ export default function Home() {
   const [sellingItemId, setSellingItemId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [minPriceRubInput, setMinPriceRubInput] = useState("");
+  const [maxPriceRubInput, setMaxPriceRubInput] = useState("");
+  const [catalogSearchInput, setCatalogSearchInput] = useState("");
+  const [catalogFilterError, setCatalogFilterError] = useState<string | null>(null);
+  const [catalogFilterActive, setCatalogFilterActive] = useState(false);
 
   function updateWallet(updatedWallet: Wallet) {
     setWallet((current) => ({
@@ -266,35 +272,6 @@ export default function Home() {
       return true;
     }
 
-    async function loadSkins() {
-      setSkinsLoading(true);
-      setSkinsError(null);
-
-      try {
-        const res = await fetch(`${API_BASE}/skins?limit=24`);
-
-        if (ignore) {
-          return;
-        }
-
-        if (res.ok) {
-          const data = (await res.json()) as SkinsResponse;
-          setSkins(data.items);
-          setSkinsPagination(data.pagination);
-        } else {
-          setSkinsError("Failed to load skins catalog.");
-        }
-      } catch {
-        if (!ignore) {
-          setSkinsError("Could not load skins catalog.");
-        }
-      } finally {
-        if (!ignore) {
-          setSkinsLoading(false);
-        }
-      }
-    }
-
     async function checkAuth() {
       try {
         const res = await fetch(`${API_BASE}/auth/me`, {
@@ -329,13 +306,81 @@ export default function Home() {
       }
     }
 
-    loadSkins();
+    doFetchSkins("", "", "");
     checkAuth();
 
     return () => {
       ignore = true;
     };
   }, []);
+
+  async function doFetchSkins(search: string, min: string, max: string) {
+    const requestId = ++skinsRequestId.current;
+    const params = new URLSearchParams({ limit: "24" });
+    if (search !== "") params.set("search", search);
+    if (min !== "") params.set("minPriceRub", min);
+    if (max !== "") params.set("maxPriceRub", max);
+
+    setSkinsLoading(true);
+    setSkinsError(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/skins?${params}`);
+      if (requestId !== skinsRequestId.current) return;
+      if (res.ok) {
+        const data = (await res.json()) as SkinsResponse;
+        setSkins(data.items);
+        setSkinsPagination(data.pagination);
+      } else {
+        setSkinsError("Failed to load skins catalog.");
+      }
+    } catch {
+      if (requestId !== skinsRequestId.current) return;
+      setSkinsError("Could not load skins catalog.");
+    } finally {
+      if (requestId === skinsRequestId.current) {
+        setSkinsLoading(false);
+      }
+    }
+  }
+
+  function applyFilter() {
+    const search = catalogSearchInput.trim();
+    const min = minPriceRubInput.trim();
+    const max = maxPriceRubInput.trim();
+
+    if (min !== "") {
+      const v = Number(min);
+      if (!Number.isFinite(v) || v < 0) {
+        setCatalogFilterError("Min price must be a number ≥ 0.");
+        return;
+      }
+    }
+    if (max !== "") {
+      const v = Number(max);
+      if (!Number.isFinite(v) || v < 0) {
+        setCatalogFilterError("Max price must be a number ≥ 0.");
+        return;
+      }
+    }
+    if (min !== "" && max !== "" && Number(min) > Number(max)) {
+      setCatalogFilterError("Min price cannot be greater than max price.");
+      return;
+    }
+
+    setCatalogFilterError(null);
+    setCatalogFilterActive(search !== "" || min !== "" || max !== "");
+    doFetchSkins(search, min, max);
+  }
+
+  function clearFilter() {
+    setCatalogSearchInput("");
+    setMinPriceRubInput("");
+    setMaxPriceRubInput("");
+    setCatalogFilterError(null);
+    setCatalogFilterActive(false);
+    doFetchSkins("", "", "");
+  }
 
   async function logout() {
     try {
@@ -592,10 +637,71 @@ export default function Home() {
             )}
           </div>
 
+          <form
+            className={styles.catalogFilters}
+            onSubmit={(e) => { e.preventDefault(); applyFilter(); }}
+          >
+            <div className={`${styles.filterField} ${styles.filterFieldSearch}`}>
+              <label htmlFor="catalogSearch">Search skins</label>
+              <input
+                id="catalogSearch"
+                className={styles.filterInput}
+                type="search"
+                placeholder="AK-47, Redline, Doppler"
+                value={catalogSearchInput}
+                onChange={(e) => setCatalogSearchInput(e.target.value)}
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label htmlFor="minPriceRub">Min price (RUB)</label>
+              <input
+                id="minPriceRub"
+                className={styles.filterInput}
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                value={minPriceRubInput}
+                onChange={(e) => setMinPriceRubInput(e.target.value)}
+              />
+            </div>
+            <div className={styles.filterField}>
+              <label htmlFor="maxPriceRub">Max price (RUB)</label>
+              <input
+                id="maxPriceRub"
+                className={styles.filterInput}
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Any"
+                value={maxPriceRubInput}
+                onChange={(e) => setMaxPriceRubInput(e.target.value)}
+              />
+            </div>
+            <div className={styles.filterActions}>
+              <button type="submit" className={styles.actionButton}>
+                Apply
+              </button>
+              <button
+                type="button"
+                className={`${styles.actionButton} ${styles.filterClearButton}`}
+                onClick={clearFilter}
+              >
+                Clear
+              </button>
+            </div>
+          </form>
+          {catalogFilterError && (
+            <p className={`${styles.error} ${styles.filterError}`}>{catalogFilterError}</p>
+          )}
           {skinsLoading && <p>Loading skins catalog...</p>}
           {skinsError && <p className={styles.error}>{skinsError}</p>}
           {!skinsLoading && !skinsError && skins.length === 0 && (
-            <p className={styles.emptyState}>No skins available.</p>
+            <p className={styles.emptyState}>
+              {catalogFilterActive
+                ? "No skins match the selected filters."
+                : "No skins available."}
+            </p>
           )}
           {!skinsLoading && skins.length > 0 && (
             <div className={styles.skinGrid}>
