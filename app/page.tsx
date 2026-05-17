@@ -10,6 +10,14 @@ type AuthUser = {
   displayName: string;
   avatar?: string | null;
   profileUrl?: string | null;
+  steamTradeUrl?: string | null;
+  steamTradeUrlVerifiedAt?: string | null;
+};
+
+type TradeUrlResponse = {
+  id: number;
+  steamTradeUrl: string;
+  steamTradeUrlVerifiedAt: string;
 };
 
 type Wallet = {
@@ -87,6 +95,11 @@ type BuySkinResponse = {
 type SellInventoryItemResponse = {
   item: InventoryItem;
   wallet: Wallet;
+};
+
+type WithdrawInventoryItemResponse = {
+  item: InventoryItem;
+  withdrawal: { id: number; status: string; provider: string };
 };
 
 const API_BASE =
@@ -172,8 +185,13 @@ export default function Home() {
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [buyingSkinId, setBuyingSkinId] = useState<number | null>(null);
   const [sellingItemId, setSellingItemId] = useState<number | null>(null);
+  const [withdrawingItemId, setWithdrawingItemId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [tradeUrlInput, setTradeUrlInput] = useState("");
+  const [tradeUrlSaving, setTradeUrlSaving] = useState(false);
+  const [tradeUrlError, setTradeUrlError] = useState<string | null>(null);
+  const [tradeUrlMessage, setTradeUrlMessage] = useState<string | null>(null);
   const [minPriceRubInput, setMinPriceRubInput] = useState("");
   const [maxPriceRubInput, setMaxPriceRubInput] = useState("");
   const [catalogSearchInput, setCatalogSearchInput] = useState("");
@@ -286,6 +304,7 @@ export default function Home() {
         } else if (res.ok) {
           const data = (await res.json()) as AuthUser;
           setUser(data);
+          setTradeUrlInput(data.steamTradeUrl ?? "");
           setLoading(false);
           const walletLoaded = await loadWallet();
 
@@ -447,6 +466,103 @@ export default function Home() {
     }
   }
 
+  async function saveTradeUrl(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!user) return;
+    const value = tradeUrlInput.trim();
+    if (value === "") {
+      setTradeUrlError("Trade URL is required.");
+      return;
+    }
+
+    setTradeUrlSaving(true);
+    setTradeUrlError(null);
+    setTradeUrlMessage(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/me/trade-url`, {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ steamTradeUrl: value }),
+      });
+
+      if (res.status === 401) {
+        clearSessionState();
+        setTradeUrlError("Please log in with Steam to save your trade URL.");
+        return;
+      }
+
+      if (!res.ok) {
+        setTradeUrlError(
+          await getResponseError(res, "Could not save trade URL."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as TradeUrlResponse;
+      setUser((current) =>
+        current
+          ? {
+              ...current,
+              steamTradeUrl: data.steamTradeUrl,
+              steamTradeUrlVerifiedAt: data.steamTradeUrlVerifiedAt,
+            }
+          : current,
+      );
+      setTradeUrlInput(data.steamTradeUrl);
+      setTradeUrlMessage("Trade URL saved.");
+    } catch {
+      setTradeUrlError("Could not reach the server.");
+    } finally {
+      setTradeUrlSaving(false);
+    }
+  }
+
+  async function withdrawInventoryItem(inventoryItemId: number) {
+    setActionError(null);
+    setActionMessage(null);
+    setWithdrawingItemId(inventoryItemId);
+
+    try {
+      const res = await fetch(`${API_BASE}/inventory/withdraw`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryItemId }),
+      });
+
+      if (res.status === 401) {
+        clearSessionState();
+        setActionError("Please log in with Steam to withdraw skins.");
+        return;
+      }
+
+      if (!res.ok) {
+        setActionError(
+          await getResponseError(res, "Could not start withdrawal."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as WithdrawInventoryItemResponse;
+      setInventory((current) =>
+        current.map((item) =>
+          item.id === data.item.id
+            ? { ...item, status: data.item.status }
+            : item,
+        ),
+      );
+      setActionMessage(
+        "Withdrawal started. Accept the Steam trade offer before it expires.",
+      );
+    } catch {
+      setActionError("Could not reach the server.");
+    } finally {
+      setWithdrawingItemId(null);
+    }
+  }
+
   async function sellInventoryItem(inventoryItemId: number) {
     setActionError(null);
     setActionMessage(null);
@@ -526,6 +642,39 @@ export default function Home() {
                   <p className={styles.meta}>Steam ID: {user.steamId}</p>
                 </div>
               </div>
+              <form className={styles.tradeUrlForm} onSubmit={saveTradeUrl}>
+                <label htmlFor="steamTradeUrl" className={styles.eyebrow}>
+                  Steam trade URL
+                </label>
+                <div className={styles.tradeUrlRow}>
+                  <input
+                    id="steamTradeUrl"
+                    className={styles.tradeUrlInput}
+                    type="url"
+                    placeholder="https://steamcommunity.com/tradeoffer/new/?partner=...&token=..."
+                    value={tradeUrlInput}
+                    onChange={(e) => setTradeUrlInput(e.target.value)}
+                  />
+                  <button
+                    type="submit"
+                    className={styles.actionButton}
+                    disabled={tradeUrlSaving}
+                  >
+                    {tradeUrlSaving ? "Saving..." : "Save"}
+                  </button>
+                </div>
+                {user.steamTradeUrlVerifiedAt && (
+                  <p className={styles.tradeUrlStatus}>
+                    Verified {formatDate(user.steamTradeUrlVerifiedAt)}
+                  </p>
+                )}
+                {tradeUrlMessage && (
+                  <p className={styles.tradeUrlStatus}>{tradeUrlMessage}</p>
+                )}
+                {tradeUrlError && (
+                  <p className={styles.error}>{tradeUrlError}</p>
+                )}
+              </form>
             </section>
 
             <section className={styles.card}>
@@ -601,12 +750,39 @@ export default function Home() {
                         </p>
                         <button
                           className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
-                          disabled={sellingItemId === item.id}
+                          disabled={
+                            sellingItemId === item.id ||
+                            item.status !== "owned" ||
+                            withdrawingItemId === item.id
+                          }
                           onClick={() => sellInventoryItem(item.id)}
                         >
                           {sellingItemId === item.id
                             ? "Selling..."
-                            : `Sell for ${formatMoney(item.sellPriceRub, "RUB")}`}
+                            : item.status === "withdraw_pending"
+                              ? "Withdrawal pending"
+                              : `Sell for ${formatMoney(item.sellPriceRub, "RUB")}`}
+                        </button>
+                        <button
+                          className={styles.actionButton}
+                          disabled={
+                            withdrawingItemId === item.id ||
+                            item.status !== "owned" ||
+                            sellingItemId === item.id ||
+                            !user.steamTradeUrl
+                          }
+                          onClick={() => withdrawInventoryItem(item.id)}
+                          title={
+                            user.steamTradeUrl
+                              ? undefined
+                              : "Save a Steam trade URL to enable withdrawals"
+                          }
+                        >
+                          {withdrawingItemId === item.id
+                            ? "Withdrawing..."
+                            : item.status === "withdraw_pending"
+                              ? "Withdrawal pending"
+                              : "Withdraw"}
                         </button>
                       </div>
                     </article>
