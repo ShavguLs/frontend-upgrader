@@ -1,142 +1,431 @@
 .page {
-  --background: #fafafa;
-  --foreground: #fff;
-
-  --text-primary: #000;
-  --text-secondary: #666;
-
-  --button-primary-hover: #383838;
-  --button-secondary-hover: #f2f2f2;
-  --button-secondary-border: #ebebeb;
-
   display: flex;
   flex: 1;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  min-height: 100vh;
   font-family: var(--font-geist-sans);
-  background-color: var(--background);
 }
 
 .main {
   display: flex;
-  flex: 1;
-  width: 100%;
-  max-width: 800px;
   flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 48px 24px;
+  width: 100%;
+  max-width: 1180px;
+}
+
+.dashboard {
+  display: grid;
+  gap: 18px;
+  width: 100%;
+}
+
+.dashboardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dashboardHeader h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card {
+  width: 100%;
+  padding: 20px;
+  border: 1px solid #e6e6e6;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.06);
+}
+
+.card h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.card p {
+  margin: 0;
+}
+
+.sectionHeader {
+  display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  background-color: var(--foreground);
-  padding: 120px 60px;
+  gap: 16px;
+  margin-bottom: 18px;
 }
 
-.intro {
+.sectionHeader h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.accountRow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin-bottom: 6px;
+  color: #666;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meta {
+  margin-top: 4px;
+  color: #666;
+  font-size: 13px;
+}
+
+.balance {
+  margin-top: 8px;
+  font-size: 40px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+.depositsHeader {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #ececec;
+}
+
+.depositList {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 14px 0 0;
+  list-style: none;
+}
+
+.depositItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f7f7f7;
+}
+
+.status {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eaf3ff;
+  color: #1c5d99;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.emptyState {
+  margin-top: 14px;
+  color: #666;
+}
+
+.catalogSection {
+  width: 100%;
+}
+
+.skinGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.skinCard {
+  overflow: hidden;
+  border: 1px solid #ececec;
+  border-radius: 14px;
+  background: #fafafa;
+}
+
+.skinImageWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  background: linear-gradient(135deg, #f2f2f2, #e8edf4);
+}
+
+.skinImage {
+  object-fit: contain;
+  padding: 14px;
+}
+
+.skinImagePlaceholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #777;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.skinCardBody {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+}
+
+.skinCardBody h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.skinPrice {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.actionButton {
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #1b2838;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.actionButton:hover:not(:disabled) {
+  background: #2a475e;
+}
+
+.actionButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.actionButtonSecondary {
+  background: #375f39;
+}
+
+.actionButtonSecondary:hover:not(:disabled) {
+  background: #477a49;
+}
+
+.actionNotice {
+  padding: 14px 18px;
+}
+
+.actionMessage {
+  color: #176534;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.skinMetaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  color: #444;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.authSection {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  gap: 24px;
-}
-
-.intro h1 {
-  max-width: 320px;
-  font-size: 40px;
-  font-weight: 600;
-  line-height: 48px;
-  letter-spacing: -2.4px;
-  text-wrap: balance;
-  color: var(--text-primary);
-}
-
-.intro p {
-  max-width: 440px;
-  font-size: 18px;
-  line-height: 32px;
-  text-wrap: balance;
-  color: var(--text-secondary);
-}
-
-.intro a {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.ctas {
-  display: flex;
-  flex-direction: row;
-  width: 100%;
-  max-width: 440px;
+  align-items: center;
   gap: 16px;
+  text-align: center;
+}
+
+.authSection h1 {
+  font-size: 32px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.authSection p {
+  font-size: 16px;
+  margin: 0;
+}
+
+.loginLink {
+  display: inline-block;
+  padding: 12px 24px;
+  background-color: #1b2838;
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 16px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.loginLink:hover {
+  background-color: #2a475e;
+}
+
+.logoutButton {
+  padding: 10px 24px;
+  background-color: transparent;
+  color: #666;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.logoutButton:hover {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.avatar {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  border-radius: 50%;
+}
+
+.error {
+  color: #c00;
   font-size: 14px;
 }
 
-.ctas a {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: 128px;
-  border: 1px solid transparent;
-  transition: 0.2s;
-  cursor: pointer;
-  width: fit-content;
-  font-weight: 500;
-}
-
-a.primary {
-  background: var(--text-primary);
-  color: var(--background);
-  gap: 8px;
-}
-
-a.secondary {
-  border-color: var(--button-secondary-border);
-}
-
-/* Enable hover only on non-touch devices */
-@media (hover: hover) and (pointer: fine) {
-  a.primary:hover {
-    background: var(--button-primary-hover);
-    border-color: transparent;
-  }
-
-  a.secondary:hover {
-    background: var(--button-secondary-hover);
-    border-color: transparent;
-  }
-}
-
-@media (max-width: 600px) {
-  .main {
-    padding: 48px 24px;
-  }
-
-  .intro {
-    gap: 16px;
-  }
-
-  .intro h1 {
-    font-size: 32px;
-    line-height: 40px;
-    letter-spacing: -1.92px;
-  }
-}
-
 @media (prefers-color-scheme: dark) {
-  .logo {
-    filter: invert();
+  .card {
+    border-color: #2d2d2d;
+    background: #111;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.24);
   }
 
-  .page {
-    --background: #000;
-    --foreground: #000;
+  .eyebrow,
+  .meta,
+  .emptyState {
+    color: #aaa;
+  }
 
-    --text-primary: #ededed;
-    --text-secondary: #999;
+  .depositsHeader {
+    border-top-color: #2d2d2d;
+  }
 
-    --button-primary-hover: #ccc;
-    --button-secondary-hover: #1a1a1a;
-    --button-secondary-border: #1a1a1a;
+  .depositItem {
+    background: #1c1c1c;
+  }
+
+  .skinCard {
+    border-color: #2d2d2d;
+    background: #1a1a1a;
+  }
+
+  .skinImageWrap {
+    background: linear-gradient(135deg, #222, #17202d);
+  }
+
+  .skinImagePlaceholder {
+    color: #aaa;
+  }
+
+  .skinMetaGrid {
+    color: #ddd;
+  }
+
+  .status {
+    background: #173653;
+    color: #9dcbf5;
+  }
+
+  .actionButton {
+    background: #3d6c8e;
+  }
+
+  .actionButton:hover:not(:disabled) {
+    background: #4e8ab5;
+  }
+
+  .actionButtonSecondary {
+    background: #477a49;
+  }
+
+  .actionButtonSecondary:hover:not(:disabled) {
+    background: #5b985d;
+  }
+
+  .actionMessage {
+    color: #6ee7a0;
+  }
+
+  .loginLink {
+    background-color: #3d6c8e;
+  }
+
+  .loginLink:hover {
+    background-color: #4e8ab5;
+  }
+
+  .logoutButton {
+    color: #aaa;
+    border-color: #444;
+  }
+
+  .logoutButton:hover {
+    background-color: #222;
+    color: #eee;
+  }
+
+  .error {
+    color: #f66;
+  }
+}
+
+@media (max-width: 520px) {
+  .main {
+    padding: 32px 16px;
+  }
+
+  .dashboardHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .sectionHeader {
+    flex-direction: column;
+  }
+
+  .accountRow {
+    align-items: flex-start;
+  }
+
+  .balance {
+    font-size: 34px;
+  }
+
+  .depositItem {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .skinGrid {
+    grid-template-columns: 1fr;
   }
 }
