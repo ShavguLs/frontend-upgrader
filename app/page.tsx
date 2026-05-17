@@ -102,6 +102,30 @@ type WithdrawInventoryItemResponse = {
   withdrawal: { id: number; status: string; provider: string };
 };
 
+type UpgradeChanceTier = 10 | 25 | 50 | 75;
+
+const UPGRADER_CHANCE_TIERS: UpgradeChanceTier[] = [10, 25, 50, 75];
+
+type UpgradeOptionsResponse = {
+  sourceValueRub: string | number;
+  displayedChancePercent: string | number;
+  targetPriceRub: string | number;
+  items: Skin[];
+};
+
+type UpgradeAttemptResponse = {
+  result: "win" | "loss";
+  displayedChancePercent: string | number;
+  sourceItem: InventoryItem;
+  wonItem?: InventoryItem | null;
+  targetSkin: Skin;
+  attempt: {
+    id: number;
+    result: string;
+    createdAt: string;
+  };
+};
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -197,6 +221,22 @@ export default function Home() {
   const [catalogSearchInput, setCatalogSearchInput] = useState("");
   const [catalogFilterError, setCatalogFilterError] = useState<string | null>(null);
   const [catalogFilterActive, setCatalogFilterActive] = useState(false);
+  const [selectedUpgradeItemId, setSelectedUpgradeItemId] = useState<number | null>(null);
+  const [selectedUpgradeChance, setSelectedUpgradeChance] = useState<UpgradeChanceTier | null>(null);
+  const [upgradeOptions, setUpgradeOptions] = useState<Skin[]>([]);
+  const [selectedTargetSkinId, setSelectedTargetSkinId] = useState<number | null>(null);
+  const [upgradeOptionsLoading, setUpgradeOptionsLoading] = useState(false);
+  const [upgradeOptionsError, setUpgradeOptionsError] = useState<string | null>(null);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [upgradeError, setUpgradeError] = useState<string | null>(null);
+  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
+  const [upgradeResult, setUpgradeResult] = useState<UpgradeAttemptResponse | null>(null);
+  const upgradeOptionsRequestId = useRef(0);
+  const [depositAmountInput, setDepositAmountInput] = useState("");
+  const [depositCurrencyInput, setDepositCurrencyInput] = useState("");
+  const [depositLoading, setDepositLoading] = useState(false);
+  const [depositError, setDepositError] = useState<string | null>(null);
+  const [depositMessage, setDepositMessage] = useState<string | null>(null);
 
   function updateWallet(updatedWallet: Wallet) {
     setWallet((current) => ({
@@ -211,6 +251,17 @@ export default function Home() {
     setWalletError(null);
     setInventory([]);
     setInventoryError(null);
+    setSelectedUpgradeItemId(null);
+    setSelectedUpgradeChance(null);
+    setSelectedTargetSkinId(null);
+    setUpgradeOptions([]);
+    setUpgradeOptionsError(null);
+    setUpgradeError(null);
+    setUpgradeMessage(null);
+    setUpgradeResult(null);
+    setDepositLoading(false);
+    setDepositError(null);
+    setDepositMessage(null);
   }
 
   useEffect(() => {
@@ -418,6 +469,9 @@ export default function Home() {
         setInventoryError(null);
         setActionMessage(null);
         setActionError(null);
+        setDepositLoading(false);
+        setDepositError(null);
+        setDepositMessage(null);
       } else {
         setError("Logout failed.");
       }
@@ -519,6 +573,88 @@ export default function Home() {
     }
   }
 
+  async function createDeposit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!user) {
+      window.location.href = `${API_BASE}/auth/steam`;
+      return;
+    }
+
+    const amountTrimmed = depositAmountInput.trim();
+
+    if (amountTrimmed === "") {
+      setDepositError("Enter an amount in RUB.");
+      setDepositMessage(null);
+      return;
+    }
+
+    const amountRub = Number(amountTrimmed);
+
+    if (!Number.isFinite(amountRub) || amountRub <= 0) {
+      setDepositError("Amount must be a positive number.");
+      setDepositMessage(null);
+      return;
+    }
+
+    if (amountRub < 100) {
+      setDepositError("Minimum deposit is 100 RUB.");
+      setDepositMessage(null);
+      return;
+    }
+
+    const currency = depositCurrencyInput.trim();
+
+    setDepositLoading(true);
+    setDepositError(null);
+    setDepositMessage(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/wallet/deposits`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amountRub,
+          ...(currency ? { currency } : {}),
+        }),
+      });
+
+      if (res.status === 401) {
+        clearSessionState();
+        setDepositError("Please log in with Steam to create a deposit.");
+        return;
+      }
+
+      if (!res.ok) {
+        setDepositError(
+          await getResponseError(res, "Could not create deposit."),
+        );
+        return;
+      }
+
+      const deposit = (await res.json()) as Deposit;
+
+      setWallet((current) =>
+        current
+          ? { wallet: current.wallet, deposits: [deposit, ...current.deposits] }
+          : current,
+      );
+      setDepositAmountInput("");
+
+      if (deposit.invoiceUrl) {
+        window.location.href = deposit.invoiceUrl;
+        return;
+      }
+
+      setDepositMessage("Deposit invoice created.");
+    } catch {
+      setDepositError("Could not reach the server.");
+    } finally {
+      setDepositLoading(false);
+    }
+  }
+
   async function withdrawInventoryItem(inventoryItemId: number) {
     setActionError(null);
     setActionMessage(null);
@@ -553,6 +689,14 @@ export default function Home() {
             : item,
         ),
       );
+      if (
+        selectedUpgradeItemId === data.item.id &&
+        data.item.status !== "owned"
+      ) {
+        setSelectedUpgradeItemId(null);
+        setSelectedTargetSkinId(null);
+        setUpgradeOptions([]);
+      }
       setActionMessage(
         "Withdrawal started. Accept the Steam trade offer before it expires.",
       );
@@ -560,6 +704,141 @@ export default function Home() {
       setActionError("Could not reach the server.");
     } finally {
       setWithdrawingItemId(null);
+    }
+  }
+
+  async function loadUpgradeOptions(
+    itemId: number | null,
+    chance: UpgradeChanceTier | null,
+  ) {
+    if (itemId === null || chance === null) {
+      ++upgradeOptionsRequestId.current;
+      setUpgradeOptionsLoading(false);
+      setUpgradeOptions([]);
+      setUpgradeOptionsError(null);
+      return;
+    }
+
+    const requestId = ++upgradeOptionsRequestId.current;
+    setUpgradeOptionsLoading(true);
+    setUpgradeOptionsError(null);
+    setUpgradeOptions([]);
+
+    const params = new URLSearchParams({
+      inventoryItemId: String(itemId),
+      chance: String(chance),
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/upgrader/options?${params}`, {
+        credentials: "include",
+      });
+      if (requestId !== upgradeOptionsRequestId.current) return;
+
+      if (res.status === 401) {
+        clearSessionState();
+        return;
+      }
+
+      if (!res.ok) {
+        setUpgradeOptionsError(
+          await getResponseError(res, "Could not load upgrade options."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as UpgradeOptionsResponse;
+      setUpgradeOptions(data.items);
+    } catch {
+      if (requestId !== upgradeOptionsRequestId.current) return;
+      setUpgradeOptionsError("Could not load upgrade options.");
+    } finally {
+      if (requestId === upgradeOptionsRequestId.current) {
+        setUpgradeOptionsLoading(false);
+      }
+    }
+  }
+
+  function selectUpgradeItem(itemId: number) {
+    setUpgradeError(null);
+    setUpgradeMessage(null);
+    setUpgradeResult(null);
+    setSelectedTargetSkinId(null);
+    const next = selectedUpgradeItemId === itemId ? null : itemId;
+    setSelectedUpgradeItemId(next);
+    void loadUpgradeOptions(next, selectedUpgradeChance);
+  }
+
+  function selectUpgradeChance(chance: UpgradeChanceTier) {
+    setUpgradeError(null);
+    setUpgradeMessage(null);
+    setUpgradeResult(null);
+    setSelectedTargetSkinId(null);
+    const next = selectedUpgradeChance === chance ? null : chance;
+    setSelectedUpgradeChance(next);
+    void loadUpgradeOptions(selectedUpgradeItemId, next);
+  }
+
+  async function performUpgrade() {
+    if (
+      selectedUpgradeItemId === null ||
+      selectedTargetSkinId === null ||
+      selectedUpgradeChance === null
+    ) {
+      return;
+    }
+
+    setUpgradeError(null);
+    setUpgradeMessage(null);
+    setUpgradeResult(null);
+    setUpgradeLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/upgrader/attempt`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          inventoryItemId: selectedUpgradeItemId,
+          targetSkinId: selectedTargetSkinId,
+          chance: selectedUpgradeChance,
+        }),
+      });
+
+      if (res.status === 401) {
+        clearSessionState();
+        setUpgradeError("Please log in with Steam to upgrade skins.");
+        return;
+      }
+
+      if (!res.ok) {
+        setUpgradeError(
+          await getResponseError(res, "Could not run the upgrade."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as UpgradeAttemptResponse;
+      setUpgradeResult(data);
+      setInventory((current) => {
+        const withoutSource = current.filter((item) => item.id !== data.sourceItem.id);
+        if (data.result === "win" && data.wonItem) {
+          return [data.wonItem, ...withoutSource];
+        }
+        return withoutSource;
+      });
+      setSelectedUpgradeItemId(null);
+      setSelectedTargetSkinId(null);
+      setUpgradeOptions([]);
+      setUpgradeMessage(
+        data.result === "win"
+          ? `Upgrade won. ${data.targetSkin.name} added to your inventory.`
+          : `Upgrade lost. ${data.sourceItem.skin.name} was consumed.`,
+      );
+    } catch {
+      setUpgradeError("Could not reach the server.");
+    } finally {
+      setUpgradeLoading(false);
     }
   }
 
@@ -592,6 +871,11 @@ export default function Home() {
       setInventory((current) =>
         current.filter((item) => item.id !== data.item.id),
       );
+      if (selectedUpgradeItemId === data.item.id) {
+        setSelectedUpgradeItemId(null);
+        setSelectedTargetSkinId(null);
+        setUpgradeOptions([]);
+      }
       setActionMessage(`${data.item.skin.name} sold successfully.`);
     } catch {
       setActionError("Could not reach the server.");
@@ -686,6 +970,52 @@ export default function Home() {
                   <p className={styles.balance}>
                     {formatMoney(wallet.wallet.balance, wallet.wallet.currency)}
                   </p>
+
+                  <form
+                    className={styles.tradeUrlForm}
+                    onSubmit={createDeposit}
+                  >
+                    <label htmlFor="depositAmount" className={styles.eyebrow}>
+                      Deposit
+                    </label>
+                    <div className={styles.tradeUrlRow}>
+                      <input
+                        id="depositAmount"
+                        className={styles.tradeUrlInput}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Amount in RUB"
+                        value={depositAmountInput}
+                        onChange={(e) =>
+                          setDepositAmountInput(e.target.value)
+                        }
+                      />
+                      <input
+                        id="depositCurrency"
+                        className={styles.tradeUrlInput}
+                        type="text"
+                        placeholder="Currency, optional"
+                        value={depositCurrencyInput}
+                        onChange={(e) =>
+                          setDepositCurrencyInput(e.target.value)
+                        }
+                      />
+                      <button
+                        type="submit"
+                        className={styles.actionButton}
+                        disabled={depositLoading}
+                      >
+                        {depositLoading ? "Creating..." : "Deposit"}
+                      </button>
+                    </div>
+                    {depositMessage && (
+                      <p className={styles.tradeUrlStatus}>{depositMessage}</p>
+                    )}
+                    {depositError && (
+                      <p className={styles.error}>{depositError}</p>
+                    )}
+                  </form>
 
                   <div className={styles.depositsHeader}>
                     <h2>Recent deposits</h2>
@@ -790,6 +1120,210 @@ export default function Home() {
                 </div>
               )}
             </section>
+
+            {(() => {
+              const ownedItems = inventory.filter(
+                (item) => item.status === "owned",
+              );
+              const selectedSource = ownedItems.find(
+                (item) => item.id === selectedUpgradeItemId,
+              );
+              const selectedTarget = upgradeOptions.find(
+                (skin) => skin.id === selectedTargetSkinId,
+              );
+              const canUpgrade =
+                selectedSource && selectedTarget && !upgradeLoading;
+
+              return (
+                <section className={styles.card}>
+                  <div className={styles.sectionHeader}>
+                    <div>
+                      <p className={styles.eyebrow}>Upgrader</p>
+                      <h2>Risk a skin for a higher-priced one</h2>
+                    </div>
+                  </div>
+
+                  <div className={styles.upgraderLayout}>
+                    <div className={styles.upgraderSubsection}>
+                      <h3>1. Choose a source skin</h3>
+                      {ownedItems.length === 0 ? (
+                        <p className={styles.upgraderEmpty}>
+                          You need an owned skin to upgrade.
+                        </p>
+                      ) : (
+                        <div className={styles.skinGrid}>
+                          {ownedItems.map((item) => {
+                            const isSelected =
+                              item.id === selectedUpgradeItemId;
+                            const cardClass = isSelected
+                              ? `${styles.skinCard} ${styles.upgraderCard} ${styles.upgraderCardSelected}`
+                              : `${styles.skinCard} ${styles.upgraderCard}`;
+
+                            return (
+                              <article
+                                className={cardClass}
+                                key={`upgrade-source-${item.id}`}
+                                onClick={() => selectUpgradeItem(item.id)}
+                              >
+                                <div className={styles.skinImageWrap}>
+                                  <SkinImage skin={item.skin} />
+                                </div>
+                                <div className={styles.skinCardBody}>
+                                  <h3>{item.skin.name}</h3>
+                                  <p className={styles.meta}>
+                                    Sell value{" "}
+                                    {formatMoney(item.sellPriceRub, "RUB")}
+                                  </p>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.upgraderSubsection}>
+                      <h3>2. Choose a displayed chance</h3>
+                      <div className={styles.upgraderChanceRow}>
+                        {UPGRADER_CHANCE_TIERS.map((tier) => {
+                          const isActive = selectedUpgradeChance === tier;
+                          return (
+                            <button
+                              type="button"
+                              key={`upgrade-chance-${tier}`}
+                              className={
+                                isActive
+                                  ? `${styles.upgraderChanceButton} ${styles.upgraderChanceButtonActive}`
+                                  : styles.upgraderChanceButton
+                              }
+                              disabled={selectedUpgradeItemId === null}
+                              onClick={() => selectUpgradeChance(tier)}
+                            >
+                              {tier}%
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className={styles.upgraderSubsection}>
+                      <h3>3. Choose a target skin</h3>
+                      {selectedUpgradeItemId === null ||
+                      selectedUpgradeChance === null ? (
+                        <p className={styles.upgraderEmpty}>
+                          Select a source skin and a chance tier to see target
+                          options.
+                        </p>
+                      ) : upgradeOptionsLoading ? (
+                        <p>Loading target options...</p>
+                      ) : upgradeOptionsError ? (
+                        <p className={styles.error}>{upgradeOptionsError}</p>
+                      ) : upgradeOptions.length === 0 ? (
+                        <p className={styles.upgraderEmpty}>
+                          No target skins available for this chance tier.
+                        </p>
+                      ) : (
+                        <div className={styles.skinGrid}>
+                          {upgradeOptions.map((skin) => {
+                            const isSelected =
+                              skin.id === selectedTargetSkinId;
+                            const cardClass = isSelected
+                              ? `${styles.skinCard} ${styles.upgraderCard} ${styles.upgraderCardSelected}`
+                              : `${styles.skinCard} ${styles.upgraderCard}`;
+
+                            return (
+                              <article
+                                className={cardClass}
+                                key={`upgrade-target-${skin.id}`}
+                                onClick={() => {
+                                  setUpgradeError(null);
+                                  setUpgradeResult(null);
+                                  setSelectedTargetSkinId((current) =>
+                                    current === skin.id ? null : skin.id,
+                                  );
+                                }}
+                              >
+                                <div className={styles.skinImageWrap}>
+                                  <SkinImage skin={skin} />
+                                </div>
+                                <div className={styles.skinCardBody}>
+                                  <h3>{skin.name}</h3>
+                                  <p className={styles.skinPrice}>
+                                    {formatMoney(skin.priceRub, "RUB")}
+                                  </p>
+                                </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={styles.upgraderSummary}>
+                      <div>
+                        <strong>Source</strong>
+                        {selectedSource
+                          ? selectedSource.skin.name
+                          : "No skin selected"}
+                      </div>
+                      <div>
+                        <strong>Source sell value</strong>
+                        {selectedSource
+                          ? formatMoney(selectedSource.sellPriceRub, "RUB")
+                          : "—"}
+                      </div>
+                      <div>
+                        <strong>Target</strong>
+                        {selectedTarget
+                          ? selectedTarget.name
+                          : "No target selected"}
+                      </div>
+                      <div>
+                        <strong>Target price</strong>
+                        {selectedTarget
+                          ? formatMoney(selectedTarget.priceRub, "RUB")
+                          : "—"}
+                      </div>
+                      <div>
+                        <strong>Displayed chance</strong>
+                        {selectedUpgradeChance !== null
+                          ? `${selectedUpgradeChance}%`
+                          : "—"}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={styles.actionButton}
+                      disabled={!canUpgrade}
+                      onClick={performUpgrade}
+                    >
+                      {upgradeLoading ? "Upgrading..." : "Upgrade"}
+                    </button>
+
+                    {upgradeError && (
+                      <p className={styles.error}>{upgradeError}</p>
+                    )}
+                    {upgradeMessage && (
+                      <p className={styles.actionMessage}>{upgradeMessage}</p>
+                    )}
+                    {upgradeResult && (
+                      <p
+                        className={
+                          upgradeResult.result === "win"
+                            ? `${styles.upgraderResult} ${styles.upgraderResultWin}`
+                            : `${styles.upgraderResult} ${styles.upgraderResultLoss}`
+                        }
+                      >
+                        {upgradeResult.result === "win"
+                          ? "Upgrade won"
+                          : "Upgrade lost"}
+                      </p>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
           </div>
         )}
 

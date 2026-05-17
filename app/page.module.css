@@ -572,3 +572,114 @@
     flex: 1;
   }
 }
+
+.upgraderLayout {
+  display: grid;
+  gap: 18px;
+}
+
+.upgraderSubsection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.upgraderSubsection h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.upgraderChanceRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.upgraderChanceButton {
+  padding: 10px 18px;
+  border: 1px solid #d0d0d0;
+  border-radius: 10px;
+  background: #fff;
+  color: #222;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.upgraderChanceButton:hover:not(:disabled) {
+  background: #f0f4f8;
+  border-color: #1b2838;
+}
+
+.upgraderChanceButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.upgraderChanceButtonActive {
+  background: #1b2838;
+  border-color: #1b2838;
+  color: #fff;
+}
+
+.upgraderChanceButtonActive:hover:not(:disabled) {
+  background: #2a475e;
+  border-color: #2a475e;
+}
+
+.upgraderSummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  padding: 12px 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  background: #fafafa;
+  font-size: 13px;
+}
+
+.upgraderSummary strong {
+  display: block;
+  font-size: 12px;
+  color: #666;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 2px;
+}
+
+.upgraderCard {
+  position: relative;
+  cursor: pointer;
+}
+
+.upgraderCardSelected {
+  outline: 3px solid #1b2838;
+  outline-offset: -3px;
+  border-radius: 12px;
+}
+
+.upgraderResult {
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.upgraderResultWin {
+  background: #e8f7ec;
+  color: #176534;
+}
+
+.upgraderResultLoss {
+  background: #fce8e8;
+  color: #87211c;
+}
+
+.upgraderEmpty {
+  font-size: 13px;
+  color: #666;
+}
