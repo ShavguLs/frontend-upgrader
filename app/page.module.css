@@ -683,3 +683,84 @@
   font-size: 13px;
   color: #666;
 }
+
+.upgradeHistory {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #ececec;
+}
+
+.upgradeHistory h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.upgradeHistoryList {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.upgradeHistoryItem {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #f7f7f7;
+}
+
+.upgradeHistoryMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.upgradeHistoryResultWin {
+  background: #e8f7ec;
+  color: #176534;
+}
+
+.upgradeHistoryResultLoss {
+  background: #fce8e8;
+  color: #87211c;
+}
+
+.upgradeHistoryDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: #444;
+  font-size: 13px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .upgradeHistory {
+    border-top-color: #2d2d2d;
+  }
+
+  .upgradeHistoryItem {
+    background: #1c1c1c;
+  }
+
+  .upgradeHistoryDetails {
+    color: #ddd;
+  }
+
+  .upgradeHistoryResultWin {
+    background: #1d4129;
+    color: #6ee7a0;
+  }
+
+  .upgradeHistoryResultLoss {
+    background: #4a1f1f;
+    color: #f7a4a4;
+  }
+}

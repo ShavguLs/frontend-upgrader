@@ -106,16 +106,21 @@ type UpgradeChanceTier = 10 | 25 | 50 | 75;
 
 const UPGRADER_CHANCE_TIERS: UpgradeChanceTier[] = [10, 25, 50, 75];
 
+type UpgradeOptionSkin = Skin & {
+  receivedValueRub: string | number;
+};
+
 type UpgradeOptionsResponse = {
   sourceValueRub: string | number;
   displayedChancePercent: string | number;
-  targetPriceRub: string | number;
-  items: Skin[];
+  targetValueRub: string | number;
+  items: UpgradeOptionSkin[];
 };
 
 type UpgradeAttemptResponse = {
   result: "win" | "loss";
   displayedChancePercent: string | number;
+  targetReceivedValueRub: string | number;
   sourceItem: InventoryItem;
   wonItem?: InventoryItem | null;
   targetSkin: Skin;
@@ -125,6 +130,30 @@ type UpgradeAttemptResponse = {
     createdAt: string;
   };
 };
+
+type UpgradeHistoryItem = {
+  id: number;
+  result: "win" | "loss";
+  displayedChancePercent: string | number;
+  sourceValueRub: string | number;
+  targetPriceRub: string | number;
+  createdAt: string;
+  sourceItem: InventoryItem | null;
+  targetSkin: Skin | null;
+  wonItem: InventoryItem | null;
+};
+
+type UpgradeHistoryResponse = {
+  items: UpgradeHistoryItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+const UPGRADE_HISTORY_PAGE_SIZE = 20;
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
@@ -223,7 +252,7 @@ export default function Home() {
   const [catalogFilterActive, setCatalogFilterActive] = useState(false);
   const [selectedUpgradeItemId, setSelectedUpgradeItemId] = useState<number | null>(null);
   const [selectedUpgradeChance, setSelectedUpgradeChance] = useState<UpgradeChanceTier | null>(null);
-  const [upgradeOptions, setUpgradeOptions] = useState<Skin[]>([]);
+  const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOptionSkin[]>([]);
   const [selectedTargetSkinId, setSelectedTargetSkinId] = useState<number | null>(null);
   const [upgradeOptionsLoading, setUpgradeOptionsLoading] = useState(false);
   const [upgradeOptionsError, setUpgradeOptionsError] = useState<string | null>(null);
@@ -237,6 +266,13 @@ export default function Home() {
   const [depositLoading, setDepositLoading] = useState(false);
   const [depositError, setDepositError] = useState<string | null>(null);
   const [depositMessage, setDepositMessage] = useState<string | null>(null);
+  const [upgradeHistory, setUpgradeHistory] = useState<UpgradeHistoryItem[]>([]);
+  const [upgradeHistoryPagination, setUpgradeHistoryPagination] =
+    useState<UpgradeHistoryResponse["pagination"] | null>(null);
+  const [upgradeHistoryLoading, setUpgradeHistoryLoading] = useState(false);
+  const [upgradeHistoryError, setUpgradeHistoryError] = useState<string | null>(
+    null,
+  );
 
   function updateWallet(updatedWallet: Wallet) {
     setWallet((current) => ({
@@ -259,9 +295,47 @@ export default function Home() {
     setUpgradeError(null);
     setUpgradeMessage(null);
     setUpgradeResult(null);
+    setUpgradeHistory([]);
+    setUpgradeHistoryPagination(null);
+    setUpgradeHistoryError(null);
+    setUpgradeHistoryLoading(false);
     setDepositLoading(false);
     setDepositError(null);
     setDepositMessage(null);
+  }
+
+  async function loadUpgradeHistory(page = 1) {
+    setUpgradeHistoryLoading(true);
+    setUpgradeHistoryError(null);
+
+    try {
+      const res = await fetch(
+        `${API_BASE}/upgrader/history?page=${page}&limit=${UPGRADE_HISTORY_PAGE_SIZE}`,
+        { credentials: "include" },
+      );
+
+      if (res.status === 401) {
+        clearSessionState();
+        return;
+      }
+
+      if (!res.ok) {
+        setUpgradeHistoryError(
+          await getResponseError(res, "Could not load upgrade history."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as UpgradeHistoryResponse;
+      setUpgradeHistory((current) =>
+        page === 1 ? data.items : [...current, ...data.items],
+      );
+      setUpgradeHistoryPagination(data.pagination);
+    } catch {
+      setUpgradeHistoryError("Could not load upgrade history.");
+    } finally {
+      setUpgradeHistoryLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -361,6 +435,7 @@ export default function Home() {
 
           if (walletLoaded) {
             await loadInventory();
+            void loadUpgradeHistory(1);
           }
         } else {
           setError("Failed to check login status.");
@@ -382,6 +457,7 @@ export default function Home() {
     return () => {
       ignore = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function doFetchSkins(search: string, min: string, max: string) {
@@ -469,6 +545,10 @@ export default function Home() {
         setInventoryError(null);
         setActionMessage(null);
         setActionError(null);
+        setUpgradeHistory([]);
+        setUpgradeHistoryPagination(null);
+        setUpgradeHistoryError(null);
+        setUpgradeHistoryLoading(false);
         setDepositLoading(false);
         setDepositError(null);
         setDepositMessage(null);
@@ -835,6 +915,7 @@ export default function Home() {
           ? `Upgrade won. ${data.targetSkin.name} added to your inventory.`
           : `Upgrade lost. ${data.sourceItem.skin.name} was consumed.`,
       );
+      void loadUpgradeHistory(1);
     } catch {
       setUpgradeError("Could not reach the server.");
     } finally {
@@ -1249,6 +1330,11 @@ export default function Home() {
                                 <div className={styles.skinCardBody}>
                                   <h3>{skin.name}</h3>
                                   <p className={styles.skinPrice}>
+                                    Upgrade value{" "}
+                                    {formatMoney(skin.receivedValueRub, "RUB")}
+                                  </p>
+                                  <p className={styles.meta}>
+                                    Market price{" "}
                                     {formatMoney(skin.priceRub, "RUB")}
                                   </p>
                                 </div>
@@ -1279,9 +1365,9 @@ export default function Home() {
                           : "No target selected"}
                       </div>
                       <div>
-                        <strong>Target price</strong>
+                        <strong>Received value</strong>
                         {selectedTarget
-                          ? formatMoney(selectedTarget.priceRub, "RUB")
+                          ? formatMoney(selectedTarget.receivedValueRub, "RUB")
                           : "—"}
                       </div>
                       <div>
@@ -1320,6 +1406,104 @@ export default function Home() {
                           : "Upgrade lost"}
                       </p>
                     )}
+
+                    <div className={styles.upgradeHistory}>
+                      <div className={styles.sectionHeader}>
+                        <div>
+                          <p className={styles.eyebrow}>History</p>
+                          <h3>Upgrade history</h3>
+                        </div>
+                        {upgradeHistoryPagination && (
+                          <p className={styles.meta}>
+                            {upgradeHistoryPagination.total} attempts
+                          </p>
+                        )}
+                      </div>
+
+                      {upgradeHistoryError && (
+                        <p className={styles.error}>{upgradeHistoryError}</p>
+                      )}
+                      {upgradeHistoryLoading && upgradeHistory.length === 0 && (
+                        <p>Loading history...</p>
+                      )}
+                      {!upgradeHistoryLoading &&
+                        !upgradeHistoryError &&
+                        upgradeHistory.length === 0 && (
+                          <p className={styles.emptyState}>
+                            No upgrade attempts yet.
+                          </p>
+                        )}
+                      {upgradeHistory.length > 0 && (
+                        <ul className={styles.upgradeHistoryList}>
+                          {upgradeHistory.map((attempt) => {
+                            const sourceName =
+                              attempt.sourceItem?.skin?.name ?? "Unknown skin";
+                            const targetName =
+                              attempt.targetSkin?.name ?? "Unknown skin";
+                            const wonName = attempt.wonItem?.skin?.name;
+                            const resultClass =
+                              attempt.result === "win"
+                                ? `${styles.status} ${styles.upgradeHistoryResultWin}`
+                                : `${styles.status} ${styles.upgradeHistoryResultLoss}`;
+
+                            return (
+                              <li
+                                className={styles.upgradeHistoryItem}
+                                key={attempt.id}
+                              >
+                                <div className={styles.upgradeHistoryMain}>
+                                  <span className={resultClass}>
+                                    {attempt.result === "win" ? "Won" : "Lost"}
+                                  </span>
+                                  <strong>{sourceName}</strong>
+                                  <span className={styles.meta}>→</span>
+                                  <strong>{targetName}</strong>
+                                </div>
+                                <div className={styles.upgradeHistoryDetails}>
+                                  <span>
+                                    Source{" "}
+                                    {formatMoney(attempt.sourceValueRub, "RUB")}
+                                  </span>
+                                  <span>
+                                    Target{" "}
+                                    {formatMoney(attempt.targetPriceRub, "RUB")}
+                                  </span>
+                                  <span>
+                                    Chance{" "}
+                                    {Number(attempt.displayedChancePercent).toFixed(
+                                      2,
+                                    )}
+                                    %
+                                  </span>
+                                  <span>{formatDate(attempt.createdAt)}</span>
+                                  {attempt.result === "win" && wonName && (
+                                    <span>Won {wonName}</span>
+                                  )}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                      {upgradeHistoryPagination &&
+                        upgradeHistoryPagination.page <
+                          upgradeHistoryPagination.totalPages && (
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            disabled={upgradeHistoryLoading}
+                            onClick={() =>
+                              loadUpgradeHistory(
+                                upgradeHistoryPagination.page + 1,
+                              )
+                            }
+                          >
+                            {upgradeHistoryLoading
+                              ? "Loading..."
+                              : "Load more"}
+                          </button>
+                        )}
+                    </div>
                   </div>
                 </section>
               );
