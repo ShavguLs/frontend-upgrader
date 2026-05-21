@@ -1,0 +1,368 @@
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--s-4);
+  background: rgba(7, 10, 14, 0.62);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--d-base) var(--ease-snap);
+}
+.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.card {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  border-radius: var(--r-lg);
+  background:
+    radial-gradient(600px 200px at 20% -10%, rgba(47, 134, 255, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(28, 33, 41, 0.96), rgba(15, 18, 22, 0.96));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-modal);
+  transform: translateY(8px) scale(0.98);
+  transition: transform var(--d-slow) var(--ease-out);
+}
+.open .card {
+  transform: none;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--s-5) var(--s-6);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.head h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-1);
+  margin: 0;
+}
+
+.close {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  cursor: pointer;
+  transition:
+    color var(--d-base) var(--ease-snap),
+    border-color var(--d-base) var(--ease-snap),
+    background var(--d-base) var(--ease-snap);
+}
+.close:hover {
+  color: var(--fg-1);
+  background: var(--surface-3);
+  border-color: var(--border-strong);
+}
+.close svg {
+  width: 14px;
+  height: 14px;
+}
+
+.body {
+  padding: var(--s-5) var(--s-6) var(--s-6);
+}
+
+.fieldLabel {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  margin-bottom: var(--s-2);
+}
+
+.amountField {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r-sm);
+  padding: 0 var(--s-4);
+  height: 56px;
+  transition:
+    border-color var(--d-base) var(--ease-snap),
+    box-shadow var(--d-base) var(--ease-snap);
+}
+.amountField:focus-within {
+  border-color: var(--brand-400);
+  box-shadow: 0 0 0 3px rgba(47, 134, 255, 0.18);
+}
+.symbol {
+  font-family: var(--font-display);
+  font-size: 22px;
+  color: var(--fg-3);
+  margin-right: var(--s-2);
+}
+.amountField input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--fg-1);
+  font-family: var(--font-display);
+  font-size: 24px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  min-width: 0;
+}
+.amountField input::-webkit-outer-spin-button,
+.amountField input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.usdTag {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--fg-3);
+  letter-spacing: 0.16em;
+}
+
+.quick {
+  display: flex;
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+  flex-wrap: wrap;
+}
+.quick button {
+  flex: 1 1 0;
+  min-width: 64px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--fg-2);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition:
+    color var(--d-base) var(--ease-snap),
+    border-color var(--d-base) var(--ease-snap),
+    background var(--d-base) var(--ease-snap);
+}
+.quick button:hover {
+  color: var(--fg-1);
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.quickActive {
+  color: var(--fg-1) !important;
+  border-color: var(--brand-400) !important;
+  background: rgba(47, 134, 255, 0.12) !important;
+  box-shadow: inset 0 0 0 1px rgba(47, 134, 255, 0.35);
+}
+
+.sectionSpacer {
+  height: 24px;
+}
+
+.cryptoGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--s-2);
+  margin-top: var(--s-3);
+}
+.crypto {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-3);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition:
+    border-color var(--d-base) var(--ease-snap),
+    background var(--d-base) var(--ease-snap),
+    transform var(--d-fast) var(--ease-snap);
+  text-align: left;
+}
+.crypto:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-3);
+}
+.cryptoActive {
+  border-color: var(--brand-400) !important;
+  background: rgba(47, 134, 255, 0.08) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(47, 134, 255, 0.35),
+    0 0 18px rgba(47, 134, 255, 0.18);
+}
+
+.cryptoLogo {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+.cryptoLogo svg {
+  width: 18px;
+  height: 18px;
+}
+.cryptoMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.cryptoName {
+  font-family: var(--font-display);
+  font-size: 13px;
+  color: var(--fg-1);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+.cryptoTicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fg-3);
+  letter-spacing: 0.08em;
+  line-height: 1;
+}
+.cryptoTick {
+  display: none;
+}
+.cryptoActive .cryptoTick {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--brand-400);
+  display: grid;
+  place-items: center;
+  color: var(--fg-on-accent);
+}
+.cryptoTick svg {
+  width: 8px;
+  height: 8px;
+  stroke-width: 3.5;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--s-5);
+  padding: var(--s-4);
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-subtle);
+}
+.summaryLabel {
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.cryptoAmount {
+  font-family: var(--font-display);
+  font-size: 16px;
+  letter-spacing: 0.03em;
+  color: var(--fg-1);
+  font-variant-numeric: tabular-nums;
+}
+.tk {
+  color: var(--fg-3);
+  margin-left: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.deposit {
+  width: 100%;
+  margin-top: var(--s-5);
+  height: 52px;
+  border: 0;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  background: linear-gradient(180deg, var(--brand-400), var(--brand-600));
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 0 0 var(--brand-glow);
+  transition:
+    box-shadow var(--d-base) var(--ease-snap),
+    transform var(--d-fast) var(--ease-snap),
+    filter var(--d-base) var(--ease-snap);
+}
+.deposit:hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 28px var(--brand-glow);
+  transform: translateY(-1px);
+}
+.deposit:active:not(:disabled) {
+  transform: scale(0.98);
+}
+.deposit:disabled {
+  background: var(--surface-3);
+  color: var(--fg-4);
+  cursor: not-allowed;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+}
+
+.feedback {
+  margin-top: var(--s-3);
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-align: center;
+  color: var(--fg-3);
+}
+.feedbackError {
+  color: #ff6b6b;
+}
+
+.cryptoLogoBtc  { background: radial-gradient(circle at 30% 25%, #FFB257, #F7931A 60%, #B86A00); }
+.cryptoLogoEth  { background: linear-gradient(160deg, #8A92B2 0%, #62688F 100%); }
+.cryptoLogoLtc  { background: linear-gradient(160deg, #BFBFBF, #345D9D); }
+.cryptoLogoSol  { background: linear-gradient(135deg, #9945FF 0%, #14F195 100%); }
+.cryptoLogoUsdt { background: linear-gradient(160deg, #50AF95, #2A8770); }
+.cryptoLogoUsdc { background: linear-gradient(160deg, #4FA8F5, #2775CA); }
+.cryptoLogoDoge { background: linear-gradient(160deg, #E6C66B, #C2A633); }
+.cryptoLogoTrx  { background: linear-gradient(160deg, #FF5C5C, #C42626); }
+.cryptoLogoBnb  { background: linear-gradient(160deg, #F8D24A, #D9A100); }
+
+@media (max-width: 480px) {
+  .cryptoGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

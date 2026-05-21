@@ -1,6 +1,78 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ── Surfaces / backgrounds ── */
+  --bg:           #0F1216;
+  --surface-1:    #15191F;
+  --surface-2:    #1C2129;
+  --surface-3:    #242A33;
+  --surface-4:    #2D343F;
+
+  /* ── Foreground ── */
+  --fg-1:         #F2F5F9;
+  --fg-2:         #B6BFCC;
+  --fg-3:         #7A8493;
+  --fg-4:         #4F5763;
+  --fg-on-accent: #0A1426;
+
+  /* ── Borders / highlights ── */
+  --border-subtle:    rgba(255, 255, 255, 0.06);
+  --border-default:   rgba(255, 255, 255, 0.12);
+  --border-strong:    rgba(255, 255, 255, 0.18);
+  --highlight-inset:  inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-modal:     0 24px 64px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  /* ── Brand blue ── */
+  --brand-300:  #4A98FF;
+  --brand-400:  #2F86FF;
+  --brand-500:  #1875F5;
+  --brand-600:  #0F60D6;
+  --brand-700:  #0A4DB0;
+  --brand-glow: rgba(47, 134, 255, 0.35);
+
+  /* ── Gold accent ── */
+  --gold-400:   #FFD24A;
+  --gold-500:   #F5B900;
+  --gold-600:   #D49A00;
+  --gold-glow:  rgba(245, 185, 0, 0.30);
+
+  /* ── Semantic ── */
+  --success:    #22C55E;
+
+  /* ── Radii ── */
+  --r-xs:  4px;
+  --r-sm:  8px;
+  --r-md:  12px;
+  --r-lg:  16px;
+  --r-pill: 999px;
+
+  /* ── Spacing ── */
+  --s-1:  4px;
+  --s-2:  8px;
+  --s-3:  12px;
+  --s-4:  16px;
+  --s-5:  20px;
+  --s-6:  24px;
+  --s-8:  32px;
+  --s-10: 40px;
+  --s-12: 48px;
+  --s-16: 64px;
+
+  /* ── Layout chrome ── */
+  --topbar-h: 64px;
+
+  /* ── Typography families (Aldrich is loaded by next/font as --font-aldrich) ── */
+  --font-display: var(--font-aldrich), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body:    var(--font-aldrich), system-ui, sans-serif;
+  --font-mono:    ui-monospace, 'SF Mono', monospace;
+
+  /* ── Motion ── */
+  --ease-snap:  cubic-bezier(0.2, 0.9, 0.3, 1);
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --d-fast:     120ms;
+  --d-base:     180ms;
+  --d-slow:     280ms;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -24,9 +96,13 @@ body {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--fg-1);
+  background:
+    radial-gradient(1100px 600px at 80% -10%, rgba(47, 134, 255, 0.10), transparent 60%),
+    radial-gradient(900px 500px at -10% 30%, rgba(136, 71, 255, 0.08), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  font-family: var(--font-aldrich), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -46,4 +122,9 @@ a {
   html {
     color-scheme: dark;
   }
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.85); }
 }

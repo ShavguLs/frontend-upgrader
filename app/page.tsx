@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
+import Navbar from "./components/Navbar";
+import TopUpModal from "./components/TopUpModal";
 
 type AuthUser = {
   id: number;
@@ -12,12 +14,6 @@ type AuthUser = {
   profileUrl?: string | null;
   steamTradeUrl?: string | null;
   steamTradeUrlVerifiedAt?: string | null;
-};
-
-type TradeUrlResponse = {
-  id: number;
-  steamTradeUrl: string;
-  steamTradeUrlVerifiedAt: string;
 };
 
 type Wallet = {
@@ -131,30 +127,6 @@ type UpgradeAttemptResponse = {
   };
 };
 
-type UpgradeHistoryItem = {
-  id: number;
-  result: "win" | "loss";
-  displayedChancePercent: string | number;
-  sourceValueRub: string | number;
-  targetPriceRub: string | number;
-  createdAt: string;
-  sourceItem: InventoryItem | null;
-  targetSkin: Skin | null;
-  wonItem: InventoryItem | null;
-};
-
-type UpgradeHistoryResponse = {
-  items: UpgradeHistoryItem[];
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-};
-
-const UPGRADE_HISTORY_PAGE_SIZE = 20;
-
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -225,7 +197,6 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [walletLoading, setWalletLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [walletError, setWalletError] = useState<string | null>(null);
   const [skins, setSkins] = useState<Skin[]>([]);
   const [skinsPagination, setSkinsPagination] = useState<
     SkinsResponse["pagination"] | null
@@ -241,10 +212,6 @@ export default function Home() {
   const [withdrawingItemId, setWithdrawingItemId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [tradeUrlInput, setTradeUrlInput] = useState("");
-  const [tradeUrlSaving, setTradeUrlSaving] = useState(false);
-  const [tradeUrlError, setTradeUrlError] = useState<string | null>(null);
-  const [tradeUrlMessage, setTradeUrlMessage] = useState<string | null>(null);
   const [minPriceRubInput, setMinPriceRubInput] = useState("");
   const [maxPriceRubInput, setMaxPriceRubInput] = useState("");
   const [catalogSearchInput, setCatalogSearchInput] = useState("");
@@ -261,18 +228,16 @@ export default function Home() {
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
   const [upgradeResult, setUpgradeResult] = useState<UpgradeAttemptResponse | null>(null);
   const upgradeOptionsRequestId = useRef(0);
-  const [depositAmountInput, setDepositAmountInput] = useState("");
-  const [depositCurrencyInput, setDepositCurrencyInput] = useState("");
-  const [depositLoading, setDepositLoading] = useState(false);
-  const [depositError, setDepositError] = useState<string | null>(null);
-  const [depositMessage, setDepositMessage] = useState<string | null>(null);
-  const [upgradeHistory, setUpgradeHistory] = useState<UpgradeHistoryItem[]>([]);
-  const [upgradeHistoryPagination, setUpgradeHistoryPagination] =
-    useState<UpgradeHistoryResponse["pagination"] | null>(null);
-  const [upgradeHistoryLoading, setUpgradeHistoryLoading] = useState(false);
-  const [upgradeHistoryError, setUpgradeHistoryError] = useState<string | null>(
-    null,
-  );
+  const [topUpOpen, setTopUpOpen] = useState(false);
+  const [topUpKey, setTopUpKey] = useState(0);
+  function handleTopUp() {
+    if (!user) {
+      window.location.assign(`${API_BASE}/auth/steam`);
+      return;
+    }
+    setTopUpKey((k) => k + 1);
+    setTopUpOpen(true);
+  }
 
   function updateWallet(updatedWallet: Wallet) {
     setWallet((current) => ({
@@ -284,7 +249,6 @@ export default function Home() {
   function clearSessionState() {
     setUser(null);
     setWallet(null);
-    setWalletError(null);
     setInventory([]);
     setInventoryError(null);
     setSelectedUpgradeItemId(null);
@@ -295,47 +259,7 @@ export default function Home() {
     setUpgradeError(null);
     setUpgradeMessage(null);
     setUpgradeResult(null);
-    setUpgradeHistory([]);
-    setUpgradeHistoryPagination(null);
-    setUpgradeHistoryError(null);
-    setUpgradeHistoryLoading(false);
-    setDepositLoading(false);
-    setDepositError(null);
-    setDepositMessage(null);
-  }
-
-  async function loadUpgradeHistory(page = 1) {
-    setUpgradeHistoryLoading(true);
-    setUpgradeHistoryError(null);
-
-    try {
-      const res = await fetch(
-        `${API_BASE}/upgrader/history?page=${page}&limit=${UPGRADE_HISTORY_PAGE_SIZE}`,
-        { credentials: "include" },
-      );
-
-      if (res.status === 401) {
-        clearSessionState();
-        return;
-      }
-
-      if (!res.ok) {
-        setUpgradeHistoryError(
-          await getResponseError(res, "Could not load upgrade history."),
-        );
-        return;
-      }
-
-      const data = (await res.json()) as UpgradeHistoryResponse;
-      setUpgradeHistory((current) =>
-        page === 1 ? data.items : [...current, ...data.items],
-      );
-      setUpgradeHistoryPagination(data.pagination);
-    } catch {
-      setUpgradeHistoryError("Could not load upgrade history.");
-    } finally {
-      setUpgradeHistoryLoading(false);
-    }
+    setTopUpOpen(false);
   }
 
   useEffect(() => {
@@ -343,7 +267,6 @@ export default function Home() {
 
     async function loadWallet() {
       setWalletLoading(true);
-      setWalletError(null);
 
       try {
         const res = await fetch(`${API_BASE}/wallet`, {
@@ -361,13 +284,9 @@ export default function Home() {
           const data = (await res.json()) as WalletResponse;
           setWallet(data);
         } else {
-          setWalletError("Failed to load wallet.");
           return false;
         }
       } catch {
-        if (!ignore) {
-          setWalletError("Could not reach the server.");
-        }
         return false;
       } finally {
         if (!ignore) {
@@ -429,13 +348,11 @@ export default function Home() {
         } else if (res.ok) {
           const data = (await res.json()) as AuthUser;
           setUser(data);
-          setTradeUrlInput(data.steamTradeUrl ?? "");
           setLoading(false);
           const walletLoaded = await loadWallet();
 
           if (walletLoaded) {
             await loadInventory();
-            void loadUpgradeHistory(1);
           }
         } else {
           setError("Failed to check login status.");
@@ -457,7 +374,6 @@ export default function Home() {
     return () => {
       ignore = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function doFetchSkins(search: string, min: string, max: string) {
@@ -539,19 +455,12 @@ export default function Home() {
         setUser(null);
         setWallet(null);
         setWalletLoading(false);
-        setWalletError(null);
         setInventory([]);
         setInventoryLoading(false);
         setInventoryError(null);
         setActionMessage(null);
         setActionError(null);
-        setUpgradeHistory([]);
-        setUpgradeHistoryPagination(null);
-        setUpgradeHistoryError(null);
-        setUpgradeHistoryLoading(false);
-        setDepositLoading(false);
-        setDepositError(null);
-        setDepositMessage(null);
+        setTopUpOpen(false);
       } else {
         setError("Logout failed.");
       }
@@ -600,139 +509,12 @@ export default function Home() {
     }
   }
 
-  async function saveTradeUrl(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!user) return;
-    const value = tradeUrlInput.trim();
-    if (value === "") {
-      setTradeUrlError("Trade URL is required.");
-      return;
-    }
-
-    setTradeUrlSaving(true);
-    setTradeUrlError(null);
-    setTradeUrlMessage(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/auth/me/trade-url`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ steamTradeUrl: value }),
-      });
-
-      if (res.status === 401) {
-        clearSessionState();
-        setTradeUrlError("Please log in with Steam to save your trade URL.");
-        return;
-      }
-
-      if (!res.ok) {
-        setTradeUrlError(
-          await getResponseError(res, "Could not save trade URL."),
-        );
-        return;
-      }
-
-      const data = (await res.json()) as TradeUrlResponse;
-      setUser((current) =>
-        current
-          ? {
-              ...current,
-              steamTradeUrl: data.steamTradeUrl,
-              steamTradeUrlVerifiedAt: data.steamTradeUrlVerifiedAt,
-            }
-          : current,
-      );
-      setTradeUrlInput(data.steamTradeUrl);
-      setTradeUrlMessage("Trade URL saved.");
-    } catch {
-      setTradeUrlError("Could not reach the server.");
-    } finally {
-      setTradeUrlSaving(false);
-    }
-  }
-
-  async function createDeposit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!user) {
-      window.location.href = `${API_BASE}/auth/steam`;
-      return;
-    }
-
-    const amountTrimmed = depositAmountInput.trim();
-
-    if (amountTrimmed === "") {
-      setDepositError("Enter an amount in RUB.");
-      setDepositMessage(null);
-      return;
-    }
-
-    const amountRub = Number(amountTrimmed);
-
-    if (!Number.isFinite(amountRub) || amountRub <= 0) {
-      setDepositError("Amount must be a positive number.");
-      setDepositMessage(null);
-      return;
-    }
-
-    if (amountRub < 100) {
-      setDepositError("Minimum deposit is 100 RUB.");
-      setDepositMessage(null);
-      return;
-    }
-
-    const currency = depositCurrencyInput.trim();
-
-    setDepositLoading(true);
-    setDepositError(null);
-    setDepositMessage(null);
-
-    try {
-      const res = await fetch(`${API_BASE}/wallet/deposits`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amountRub,
-          ...(currency ? { currency } : {}),
-        }),
-      });
-
-      if (res.status === 401) {
-        clearSessionState();
-        setDepositError("Please log in with Steam to create a deposit.");
-        return;
-      }
-
-      if (!res.ok) {
-        setDepositError(
-          await getResponseError(res, "Could not create deposit."),
-        );
-        return;
-      }
-
-      const deposit = (await res.json()) as Deposit;
-
-      setWallet((current) =>
-        current
-          ? { wallet: current.wallet, deposits: [deposit, ...current.deposits] }
-          : current,
-      );
-      setDepositAmountInput("");
-
-      if (deposit.invoiceUrl) {
-        window.location.href = deposit.invoiceUrl;
-        return;
-      }
-
-      setDepositMessage("Deposit invoice created.");
-    } catch {
-      setDepositError("Could not reach the server.");
-    } finally {
-      setDepositLoading(false);
-    }
+  function handleDepositCreated(deposit: Deposit) {
+    setWallet((current) =>
+      current
+        ? { wallet: current.wallet, deposits: [deposit, ...current.deposits] }
+        : current,
+    );
   }
 
   async function withdrawInventoryItem(inventoryItemId: number) {
@@ -915,7 +697,6 @@ export default function Home() {
           ? `Upgrade won. ${data.targetSkin.name} added to your inventory.`
           : `Upgrade lost. ${data.sourceItem.skin.name} was consumed.`,
       );
-      void loadUpgradeHistory(1);
     } catch {
       setUpgradeError("Could not reach the server.");
     } finally {
@@ -967,164 +748,25 @@ export default function Home() {
 
   return (
     <div className={styles.page}>
+      <Navbar
+        user={user}
+        wallet={wallet}
+        walletLoading={walletLoading}
+        apiBase={API_BASE}
+        onLogout={logout}
+        onTopUp={handleTopUp}
+      />
       <main className={styles.main}>
         {loading && <p>Checking login status...</p>}
         {error && <p className={styles.error}>{error}</p>}
         {!loading && !user && (
           <div className={styles.authSection}>
             <h1>CS2 Gambler</h1>
-            <a
-              className={styles.loginLink}
-              href={`${API_BASE}/auth/steam`}
-            >
-              Login with Steam
-            </a>
+            <p className={styles.eyebrow}>Log in with Steam from the top navbar to get started.</p>
           </div>
         )}
         {!loading && user && (
           <div className={styles.dashboard}>
-            <header className={styles.dashboardHeader}>
-              <h1>CS2 Gambler</h1>
-              <button className={styles.logoutButton} onClick={logout}>
-                Logout
-              </button>
-            </header>
-
-            <section className={styles.card}>
-              <div className={styles.accountRow}>
-                {user.avatar && (
-                  <Image
-                    className={styles.avatar}
-                    src={user.avatar}
-                    alt={user.displayName}
-                    width={64}
-                    height={64}
-                  />
-                )}
-                <div>
-                  <p className={styles.eyebrow}>Steam account</p>
-                  <h2>{user.displayName}</h2>
-                  <p className={styles.meta}>Steam ID: {user.steamId}</p>
-                </div>
-              </div>
-              <form className={styles.tradeUrlForm} onSubmit={saveTradeUrl}>
-                <label htmlFor="steamTradeUrl" className={styles.eyebrow}>
-                  Steam trade URL
-                </label>
-                <div className={styles.tradeUrlRow}>
-                  <input
-                    id="steamTradeUrl"
-                    className={styles.tradeUrlInput}
-                    type="url"
-                    placeholder="https://steamcommunity.com/tradeoffer/new/?partner=...&token=..."
-                    value={tradeUrlInput}
-                    onChange={(e) => setTradeUrlInput(e.target.value)}
-                  />
-                  <button
-                    type="submit"
-                    className={styles.actionButton}
-                    disabled={tradeUrlSaving}
-                  >
-                    {tradeUrlSaving ? "Saving..." : "Save"}
-                  </button>
-                </div>
-                {user.steamTradeUrlVerifiedAt && (
-                  <p className={styles.tradeUrlStatus}>
-                    Verified {formatDate(user.steamTradeUrlVerifiedAt)}
-                  </p>
-                )}
-                {tradeUrlMessage && (
-                  <p className={styles.tradeUrlStatus}>{tradeUrlMessage}</p>
-                )}
-                {tradeUrlError && (
-                  <p className={styles.error}>{tradeUrlError}</p>
-                )}
-              </form>
-            </section>
-
-            <section className={styles.card}>
-              <p className={styles.eyebrow}>Wallet balance</p>
-              {walletLoading && <p>Loading wallet...</p>}
-              {walletError && <p className={styles.error}>{walletError}</p>}
-              {!walletLoading && wallet && (
-                <>
-                  <p className={styles.balance}>
-                    {formatMoney(wallet.wallet.balance, wallet.wallet.currency)}
-                  </p>
-
-                  <form
-                    className={styles.tradeUrlForm}
-                    onSubmit={createDeposit}
-                  >
-                    <label htmlFor="depositAmount" className={styles.eyebrow}>
-                      Deposit
-                    </label>
-                    <div className={styles.tradeUrlRow}>
-                      <input
-                        id="depositAmount"
-                        className={styles.tradeUrlInput}
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="Amount in RUB"
-                        value={depositAmountInput}
-                        onChange={(e) =>
-                          setDepositAmountInput(e.target.value)
-                        }
-                      />
-                      <input
-                        id="depositCurrency"
-                        className={styles.tradeUrlInput}
-                        type="text"
-                        placeholder="Currency, optional"
-                        value={depositCurrencyInput}
-                        onChange={(e) =>
-                          setDepositCurrencyInput(e.target.value)
-                        }
-                      />
-                      <button
-                        type="submit"
-                        className={styles.actionButton}
-                        disabled={depositLoading}
-                      >
-                        {depositLoading ? "Creating..." : "Deposit"}
-                      </button>
-                    </div>
-                    {depositMessage && (
-                      <p className={styles.tradeUrlStatus}>{depositMessage}</p>
-                    )}
-                    {depositError && (
-                      <p className={styles.error}>{depositError}</p>
-                    )}
-                  </form>
-
-                  <div className={styles.depositsHeader}>
-                    <h2>Recent deposits</h2>
-                  </div>
-
-                  {wallet.deposits.length > 0 ? (
-                    <ul className={styles.depositList}>
-                      {wallet.deposits.map((deposit) => (
-                        <li className={styles.depositItem} key={deposit.id}>
-                          <div>
-                            <strong>
-                              {formatMoney(deposit.amountRub, "RUB")}
-                            </strong>
-                            <p className={styles.meta}>
-                              {formatDate(deposit.createdAt)}
-                            </p>
-                          </div>
-                          <span className={styles.status}>{deposit.status}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className={styles.emptyState}>No recent deposits.</p>
-                  )}
-                </>
-              )}
-            </section>
-
             <section className={styles.card}>
               <div className={styles.sectionHeader}>
                 <div>
@@ -1186,7 +828,7 @@ export default function Home() {
                           title={
                             user.steamTradeUrl
                               ? undefined
-                              : "Save a Steam trade URL to enable withdrawals"
+                              : "Save a Steam trade URL in your profile to enable withdrawals"
                           }
                         >
                           {withdrawingItemId === item.id
@@ -1407,103 +1049,6 @@ export default function Home() {
                       </p>
                     )}
 
-                    <div className={styles.upgradeHistory}>
-                      <div className={styles.sectionHeader}>
-                        <div>
-                          <p className={styles.eyebrow}>History</p>
-                          <h3>Upgrade history</h3>
-                        </div>
-                        {upgradeHistoryPagination && (
-                          <p className={styles.meta}>
-                            {upgradeHistoryPagination.total} attempts
-                          </p>
-                        )}
-                      </div>
-
-                      {upgradeHistoryError && (
-                        <p className={styles.error}>{upgradeHistoryError}</p>
-                      )}
-                      {upgradeHistoryLoading && upgradeHistory.length === 0 && (
-                        <p>Loading history...</p>
-                      )}
-                      {!upgradeHistoryLoading &&
-                        !upgradeHistoryError &&
-                        upgradeHistory.length === 0 && (
-                          <p className={styles.emptyState}>
-                            No upgrade attempts yet.
-                          </p>
-                        )}
-                      {upgradeHistory.length > 0 && (
-                        <ul className={styles.upgradeHistoryList}>
-                          {upgradeHistory.map((attempt) => {
-                            const sourceName =
-                              attempt.sourceItem?.skin?.name ?? "Unknown skin";
-                            const targetName =
-                              attempt.targetSkin?.name ?? "Unknown skin";
-                            const wonName = attempt.wonItem?.skin?.name;
-                            const resultClass =
-                              attempt.result === "win"
-                                ? `${styles.status} ${styles.upgradeHistoryResultWin}`
-                                : `${styles.status} ${styles.upgradeHistoryResultLoss}`;
-
-                            return (
-                              <li
-                                className={styles.upgradeHistoryItem}
-                                key={attempt.id}
-                              >
-                                <div className={styles.upgradeHistoryMain}>
-                                  <span className={resultClass}>
-                                    {attempt.result === "win" ? "Won" : "Lost"}
-                                  </span>
-                                  <strong>{sourceName}</strong>
-                                  <span className={styles.meta}>→</span>
-                                  <strong>{targetName}</strong>
-                                </div>
-                                <div className={styles.upgradeHistoryDetails}>
-                                  <span>
-                                    Source{" "}
-                                    {formatMoney(attempt.sourceValueRub, "RUB")}
-                                  </span>
-                                  <span>
-                                    Target{" "}
-                                    {formatMoney(attempt.targetPriceRub, "RUB")}
-                                  </span>
-                                  <span>
-                                    Chance{" "}
-                                    {Number(attempt.displayedChancePercent).toFixed(
-                                      2,
-                                    )}
-                                    %
-                                  </span>
-                                  <span>{formatDate(attempt.createdAt)}</span>
-                                  {attempt.result === "win" && wonName && (
-                                    <span>Won {wonName}</span>
-                                  )}
-                                </div>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      )}
-                      {upgradeHistoryPagination &&
-                        upgradeHistoryPagination.page <
-                          upgradeHistoryPagination.totalPages && (
-                          <button
-                            type="button"
-                            className={styles.actionButton}
-                            disabled={upgradeHistoryLoading}
-                            onClick={() =>
-                              loadUpgradeHistory(
-                                upgradeHistoryPagination.page + 1,
-                              )
-                            }
-                          >
-                            {upgradeHistoryLoading
-                              ? "Loading..."
-                              : "Load more"}
-                          </button>
-                        )}
-                    </div>
                   </div>
                 </section>
               );
@@ -1652,6 +1197,13 @@ export default function Home() {
           )}
         </section>
       </main>
+      <TopUpModal
+        key={topUpKey}
+        open={topUpOpen}
+        onClose={() => setTopUpOpen(false)}
+        apiBase={API_BASE}
+        onDepositCreated={handleDepositCreated}
+      />
     </div>
   );
 }
