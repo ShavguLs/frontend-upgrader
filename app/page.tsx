@@ -12,6 +12,15 @@ import Image from "next/image";
 import styles from "./page.module.css";
 import Navbar from "./components/Navbar";
 import TopUpModal from "./components/TopUpModal";
+import {
+  clearScheduledSounds,
+  playAddSound,
+  playBuySound,
+  playDeselectSound,
+  playRemoveSound,
+  playSelectSound,
+  scheduleSpinTicks,
+} from "./lib/sfx";
 
 type AuthUser = {
   id: number;
@@ -640,6 +649,7 @@ export default function Home() {
   const [wheelRotation, setWheelRotation] = useState(0);
   const [wheelChancePercent, setWheelChancePercent] = useState<number>(25);
   const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const soundTimeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   const upgradeOptionsRequestId = useRef(0);
   const [topUpOpen, setTopUpOpen] = useState(false);
@@ -654,6 +664,8 @@ export default function Home() {
         clearTimeout(handle);
       }
       toastTimeoutRefs.current = [];
+      clearScheduledSounds(soundTimeoutRefs.current);
+      soundTimeoutRefs.current = [];
     };
   }, []);
 
@@ -700,12 +712,15 @@ export default function Home() {
   }
 
   function toggleShopSkinSelection(skin: Skin) {
+    if (bulkBuying) return;
     setSelectedShopSkins((current) => {
       const next = new Map(current);
       if (next.has(skin.id)) {
         next.delete(skin.id);
+        playRemoveSound();
       } else {
         next.set(skin.id, skin);
+        playAddSound();
       }
       return next;
     });
@@ -961,6 +976,7 @@ export default function Home() {
       setInventory((current) => [...data.items, ...current]);
       setSelectedShopSkins(new Map());
       const count = data.items.length;
+      playBuySound();
       showToast(
         count === 1
           ? `${data.items[0].skin.name} added to your inventory.`
@@ -1040,14 +1056,21 @@ export default function Home() {
     setSelectedTargetSkinId(null);
     setWheelState("idle");
     const next = selectedUpgradeItemId === itemId ? null : itemId;
+    if (next === null) {
+      playDeselectSound();
+    } else {
+      playSelectSound();
+    }
     setSelectedUpgradeItemId(next);
     void loadUpgradeOptions(next, selectedUpgradeChance);
   }
 
   function selectUpgradeChance(chance: UpgradeChanceTier) {
     if (upgradeLoading) return;
+    if (chance === selectedUpgradeChance) return;
     setSelectedTargetSkinId(null);
     setWheelState("idle");
+    playSelectSound();
     setSelectedUpgradeChance(chance);
     setWheelChancePercent(chance);
     void loadUpgradeOptions(selectedUpgradeItemId, chance);
@@ -1056,6 +1079,11 @@ export default function Home() {
   function selectUpgradeTarget(skinId: number) {
     if (upgradeLoading) return;
     setWheelState("idle");
+    if (selectedTargetSkinId === skinId) {
+      playDeselectSound();
+    } else {
+      playSelectSound();
+    }
     setSelectedTargetSkinId((current) =>
       current === skinId ? null : skinId,
     );
@@ -1075,6 +1103,8 @@ export default function Home() {
       clearTimeout(wheelTimeoutRef.current);
       wheelTimeoutRef.current = null;
     }
+    clearScheduledSounds(soundTimeoutRefs.current);
+    soundTimeoutRefs.current = [];
 
     setUpgradeLoading(true);
     setWheelState("idle");
@@ -1118,9 +1148,12 @@ export default function Home() {
       setWheelRotation((current) =>
         computeNextWheelRotation(current, safeChancePercent, data.result === "win"),
       );
+      soundTimeoutRefs.current = scheduleSpinTicks(WHEEL_SPIN_DURATION_MS);
 
       wheelTimeoutRef.current = setTimeout(() => {
         wheelTimeoutRef.current = null;
+        clearScheduledSounds(soundTimeoutRefs.current);
+        soundTimeoutRefs.current = [];
         setWheelState(data.result);
         setInventory((current) => {
           const withoutSource = current.filter(
@@ -1136,15 +1169,19 @@ export default function Home() {
         setUpgradeOptions([]);
         setTargetPage(1);
         if (data.result === "win") {
+          playBuySound();
           showToast(
             `Won! ${data.targetSkin.name} added to your inventory.`,
           );
         } else {
+          playRemoveSound();
           showToast(`Lost ${data.sourceItem.skin.name}.`, "error");
         }
         setUpgradeLoading(false);
       }, WHEEL_FINALIZE_MS);
     } catch {
+      clearScheduledSounds(soundTimeoutRefs.current);
+      soundTimeoutRefs.current = [];
       showToast("Could not reach the server.", "error");
       setUpgradeLoading(false);
     }

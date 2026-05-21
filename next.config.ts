@@ -27,6 +27,18 @@ const nextConfig: NextConfig = {
         port: "",
         pathname: "/**",
       },
+      {
+        protocol: "https",
+        hostname: "community.akamai.steamstatic.com",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "community.cloudflare.steamstatic.com",
+        port: "",
+        pathname: "/**",
+      },
     ],
   },
 };
