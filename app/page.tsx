@@ -90,16 +90,18 @@ type InventoryItem = {
   skin: Skin;
 };
 
-type BuySkinResponse = {
-  item: InventoryItem;
+type BuySkinsBulkResponse = {
+  items: InventoryItem[];
   wallet: Wallet;
+  totalPriceRub: string;
 };
 
 type UpgradeChanceTier = 10 | 25 | 50 | 75;
 
 const UPGRADER_CHANCE_TIERS: UpgradeChanceTier[] = [10, 25, 50, 75];
 const INVENTORY_PAGE_SIZE = 12;
-const SHOP_PAGE_SIZE = 24;
+const SHOP_PAGE_SIZE = 12;
+const TARGET_PAGE_SIZE = 12;
 const WHEEL_SPIN_DURATION_MS = 3400;
 const WHEEL_FINALIZE_MS = 3500;
 
@@ -131,6 +133,48 @@ type UpgradeAttemptResponse = {
 type InventorySort = "price-desc" | "price-asc" | "name";
 type WheelState = "idle" | "spinning" | "win" | "loss";
 type InventoryTab = "mine" | "shop";
+
+type ToastVariant = "success" | "error";
+
+type ToastMessage = {
+  id: number;
+  message: string;
+  variant: ToastVariant;
+};
+
+const TOAST_DURATION_MS = 2200;
+
+function ToastSuccessIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="4 12 10 18 20 6" />
+    </svg>
+  );
+}
+
+function ToastErrorIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
@@ -340,9 +384,6 @@ function SkinTile({
             <span className={styles.skinTileStatus}>{statusLabel}</span>
           )}
           <div className={styles.skinTileInfo}>
-            {skin.weapon && (
-              <span className={styles.skinTileWeapon}>{skin.weapon}</span>
-            )}
             <span className={styles.skinTileName}>{skin.name}</span>
             <span className={styles.skinTilePrice}>{priceLabel}</span>
             {priceSubLabel && (
@@ -392,7 +433,7 @@ function SkinContainer({
         )}
       </header>
       {toolbar && <div className={styles.skinToolbar}>{toolbar}</div>}
-      {children}
+      <div className={styles.skinContainerBody}>{children}</div>
       {footer}
     </section>
   );
@@ -492,9 +533,6 @@ function UpgraderSlot({ side, skin, priceLabel }: UpgraderSlotProps) {
         <>
           <UpgraderSlotImage skin={skin} />
           <div className={styles.upgraderSlotInfo}>
-            {skin.weapon && (
-              <span className={styles.upgraderSlotWeapon}>{skin.weapon}</span>
-            )}
             <span className={styles.upgraderSlotName}>{skin.name}</span>
             {priceLabel && (
               <span className={styles.upgraderSlotPrice}>{priceLabel}</span>
@@ -554,9 +592,14 @@ export default function Home() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
-  const [buyingSkinId, setBuyingSkinId] = useState<number | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [selectedShopSkins, setSelectedShopSkins] = useState<Map<number, Skin>>(
+    () => new Map(),
+  );
+  const [bulkBuying, setBulkBuying] = useState(false);
+
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const toastIdRef = useRef(0);
+  const toastTimeoutRefs = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Shop filters (server-side)
   const [shopSearchInput, setShopSearchInput] = useState("");
@@ -582,6 +625,7 @@ export default function Home() {
   const [selectedUpgradeChance, setSelectedUpgradeChance] =
     useState<UpgradeChanceTier>(25);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOptionSkin[]>([]);
+  const [targetPage, setTargetPage] = useState(1);
   const [selectedTargetSkinId, setSelectedTargetSkinId] = useState<
     number | null
   >(null);
@@ -590,8 +634,6 @@ export default function Home() {
     null,
   );
   const [upgradeLoading, setUpgradeLoading] = useState(false);
-  const [upgradeError, setUpgradeError] = useState<string | null>(null);
-  const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
 
   // Wheel
   const [wheelState, setWheelState] = useState<WheelState>("idle");
@@ -608,8 +650,24 @@ export default function Home() {
       if (wheelTimeoutRef.current) {
         clearTimeout(wheelTimeoutRef.current);
       }
+      for (const handle of toastTimeoutRefs.current) {
+        clearTimeout(handle);
+      }
+      toastTimeoutRefs.current = [];
     };
   }, []);
+
+  function showToast(message: string, variant: ToastVariant = "success") {
+    const id = ++toastIdRef.current;
+    setToasts((current) => [...current, { id, message, variant }]);
+    const handle = setTimeout(() => {
+      setToasts((current) => current.filter((t) => t.id !== id));
+      toastTimeoutRefs.current = toastTimeoutRefs.current.filter(
+        (h) => h !== handle,
+      );
+    }, TOAST_DURATION_MS);
+    toastTimeoutRefs.current.push(handle);
+  }
 
   function handleTopUp() {
     if (!user) {
@@ -635,10 +693,22 @@ export default function Home() {
     setSelectedUpgradeItemId(null);
     setSelectedTargetSkinId(null);
     setUpgradeOptions([]);
+    setTargetPage(1);
     setUpgradeOptionsError(null);
-    setUpgradeError(null);
-    setUpgradeMessage(null);
     setTopUpOpen(false);
+    setSelectedShopSkins(new Map());
+  }
+
+  function toggleShopSkinSelection(skin: Skin) {
+    setSelectedShopSkins((current) => {
+      const next = new Map(current);
+      if (next.has(skin.id)) {
+        next.delete(skin.id);
+      } else {
+        next.set(skin.id, skin);
+      }
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -844,8 +914,6 @@ export default function Home() {
         clearSessionState();
         setWalletLoading(false);
         setInventoryLoading(false);
-        setActionMessage(null);
-        setActionError(null);
       } else {
         setError("Logout failed.");
       }
@@ -854,43 +922,54 @@ export default function Home() {
     }
   }
 
-  async function buySkin(skinId: number) {
+  async function buySelectedShopSkins() {
     if (!user) {
       window.location.href = `${API_BASE}/auth/steam`;
       return;
     }
+    if (selectedShopSkins.size === 0 || bulkBuying) {
+      return;
+    }
 
-    setActionError(null);
-    setActionMessage(null);
-    setBuyingSkinId(skinId);
+    const skinIds = Array.from(selectedShopSkins.keys());
+    setBulkBuying(true);
 
     try {
-      const res = await fetch(`${API_BASE}/inventory/buy`, {
+      const res = await fetch(`${API_BASE}/inventory/buy-bulk`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skinId }),
+        body: JSON.stringify({ skinIds }),
       });
 
       if (res.status === 401) {
         clearSessionState();
-        setActionError("Please log in with Steam to buy skins.");
+        showToast("Please log in with Steam to buy skins.", "error");
         return;
       }
 
       if (!res.ok) {
-        setActionError(await getResponseError(res, "Could not buy skin."));
+        showToast(
+          await getResponseError(res, "Could not buy skins."),
+          "error",
+        );
         return;
       }
 
-      const data = (await res.json()) as BuySkinResponse;
+      const data = (await res.json()) as BuySkinsBulkResponse;
       updateWallet(data.wallet);
-      setInventory((current) => [data.item, ...current]);
-      setActionMessage(`${data.item.skin.name} added to your inventory.`);
+      setInventory((current) => [...data.items, ...current]);
+      setSelectedShopSkins(new Map());
+      const count = data.items.length;
+      showToast(
+        count === 1
+          ? `${data.items[0].skin.name} added to your inventory.`
+          : `${count} skins added to your inventory.`,
+      );
     } catch {
-      setActionError("Could not reach the server.");
+      showToast("Could not reach the server.", "error");
     } finally {
-      setBuyingSkinId(null);
+      setBulkBuying(false);
     }
   }
 
@@ -910,6 +989,7 @@ export default function Home() {
       ++upgradeOptionsRequestId.current;
       setUpgradeOptionsLoading(false);
       setUpgradeOptions([]);
+      setTargetPage(1);
       setUpgradeOptionsError(null);
       return;
     }
@@ -918,6 +998,7 @@ export default function Home() {
     setUpgradeOptionsLoading(true);
     setUpgradeOptionsError(null);
     setUpgradeOptions([]);
+    setTargetPage(1);
 
     const params = new URLSearchParams({
       inventoryItemId: String(itemId),
@@ -956,8 +1037,6 @@ export default function Home() {
 
   function selectUpgradeItem(itemId: number) {
     if (upgradeLoading) return;
-    setUpgradeError(null);
-    setUpgradeMessage(null);
     setSelectedTargetSkinId(null);
     setWheelState("idle");
     const next = selectedUpgradeItemId === itemId ? null : itemId;
@@ -967,8 +1046,6 @@ export default function Home() {
 
   function selectUpgradeChance(chance: UpgradeChanceTier) {
     if (upgradeLoading) return;
-    setUpgradeError(null);
-    setUpgradeMessage(null);
     setSelectedTargetSkinId(null);
     setWheelState("idle");
     setSelectedUpgradeChance(chance);
@@ -978,8 +1055,6 @@ export default function Home() {
 
   function selectUpgradeTarget(skinId: number) {
     if (upgradeLoading) return;
-    setUpgradeError(null);
-    setUpgradeMessage(null);
     setWheelState("idle");
     setSelectedTargetSkinId((current) =>
       current === skinId ? null : skinId,
@@ -1001,8 +1076,6 @@ export default function Home() {
       wheelTimeoutRef.current = null;
     }
 
-    setUpgradeError(null);
-    setUpgradeMessage(null);
     setUpgradeLoading(true);
     setWheelState("idle");
 
@@ -1020,14 +1093,15 @@ export default function Home() {
 
       if (res.status === 401) {
         clearSessionState();
-        setUpgradeError("Please log in with Steam to upgrade skins.");
+        showToast("Please log in with Steam to upgrade skins.", "error");
         setUpgradeLoading(false);
         return;
       }
 
       if (!res.ok) {
-        setUpgradeError(
+        showToast(
           await getResponseError(res, "Could not run the upgrade."),
+          "error",
         );
         setUpgradeLoading(false);
         return;
@@ -1060,15 +1134,18 @@ export default function Home() {
         setSelectedUpgradeItemId(null);
         setSelectedTargetSkinId(null);
         setUpgradeOptions([]);
-        setUpgradeMessage(
-          data.result === "win"
-            ? `Won! ${data.targetSkin.name} added to your inventory.`
-            : `Lost ${data.sourceItem.skin.name}.`,
-        );
+        setTargetPage(1);
+        if (data.result === "win") {
+          showToast(
+            `Won! ${data.targetSkin.name} added to your inventory.`,
+          );
+        } else {
+          showToast(`Lost ${data.sourceItem.skin.name}.`, "error");
+        }
         setUpgradeLoading(false);
       }, WHEEL_FINALIZE_MS);
     } catch {
-      setUpgradeError("Could not reach the server.");
+      showToast("Could not reach the server.", "error");
       setUpgradeLoading(false);
     }
   }
@@ -1083,16 +1160,21 @@ export default function Home() {
     return inventoryMaxInput.trim() !== "" && Number.isFinite(v) ? v : null;
   }, [inventoryMaxInput]);
 
+  const ownedInventory = useMemo(
+    () => inventory.filter((item) => item.status === "owned"),
+    [inventory],
+  );
+
   const filteredInventory = useMemo(() => {
     const filtered = filterInventoryItems(
-      inventory,
+      ownedInventory,
       inventorySearchInput,
       inventoryMinNum,
       inventoryMaxNum,
     );
     return sortInventoryItems(filtered, inventorySort);
   }, [
-    inventory,
+    ownedInventory,
     inventorySearchInput,
     inventoryMinNum,
     inventoryMaxNum,
@@ -1114,16 +1196,16 @@ export default function Home() {
   }, [filteredInventory, safeInventoryPage]);
 
   const inventoryTotalValue = useMemo(() => {
-    return inventory.reduce(
+    return ownedInventory.reduce(
       (sum, item) => sum + (Number(item.sellPriceRub) || 0),
       0,
     );
-  }, [inventory]);
+  }, [ownedInventory]);
 
   const selectedSource = useMemo(
     () =>
-      inventory.find((item) => item.id === selectedUpgradeItemId) ?? null,
-    [inventory, selectedUpgradeItemId],
+      ownedInventory.find((item) => item.id === selectedUpgradeItemId) ?? null,
+    [ownedInventory, selectedUpgradeItemId],
   );
   const selectedTarget = useMemo(
     () => upgradeOptions.find((s) => s.id === selectedTargetSkinId) ?? null,
@@ -1173,6 +1255,41 @@ export default function Home() {
           ? "Lost"
           : "Chance";
 
+  const selectedShopCount = selectedShopSkins.size;
+  const selectedShopTotal = useMemo(() => {
+    let sum = 0;
+    for (const skin of selectedShopSkins.values()) {
+      const v = Number(skin.priceRub);
+      if (Number.isFinite(v)) sum += v;
+    }
+    return sum;
+  }, [selectedShopSkins]);
+
+  const walletBalanceNum = wallet ? Number(wallet.wallet.balance) : null;
+  const isWalletLoading = Boolean(user && walletLoading);
+  const hasEnoughBalanceForSelected =
+    !user ||
+    (walletBalanceNum !== null &&
+      Number.isFinite(walletBalanceNum) &&
+      walletBalanceNum >= selectedShopTotal);
+  const bulkBuyDisabled =
+    !user ||
+    selectedShopCount === 0 ||
+    isWalletLoading ||
+    !hasEnoughBalanceForSelected ||
+    bulkBuying;
+  const bulkBuyLabel = !user
+    ? "Log in to buy"
+    : bulkBuying
+      ? "Buying…"
+      : isWalletLoading
+        ? "Loading wallet…"
+        : selectedShopCount === 0
+          ? "Select skins"
+          : !hasEnoughBalanceForSelected
+            ? "Not enough balance"
+            : `Buy selected (${selectedShopCount}) ${formatMoney(selectedShopTotal, "RUB")}`;
+
   const shopTotalPages = skinsPagination
     ? Math.max(1, skinsPagination.totalPages)
     : 1;
@@ -1184,6 +1301,24 @@ export default function Home() {
   const inventoryRangeTo = Math.min(
     safeInventoryPage * INVENTORY_PAGE_SIZE,
     filteredInventory.length,
+  );
+
+  const targetTotalPages = Math.max(
+    1,
+    Math.ceil(upgradeOptions.length / TARGET_PAGE_SIZE),
+  );
+  const safeTargetPage = Math.min(Math.max(1, targetPage), targetTotalPages);
+
+  const targetPageItems = useMemo(() => {
+    const start = (safeTargetPage - 1) * TARGET_PAGE_SIZE;
+    return upgradeOptions.slice(start, start + TARGET_PAGE_SIZE);
+  }, [upgradeOptions, safeTargetPage]);
+
+  const targetRangeFrom =
+    upgradeOptions.length === 0 ? 0 : (safeTargetPage - 1) * TARGET_PAGE_SIZE + 1;
+  const targetRangeTo = Math.min(
+    safeTargetPage * TARGET_PAGE_SIZE,
+    upgradeOptions.length,
   );
 
   const shopRangeFrom =
@@ -1204,6 +1339,31 @@ export default function Home() {
         onLogout={logout}
         onTopUp={handleTopUp}
       />
+      {toasts.length > 0 && (
+        <div
+          className={styles.toastZone}
+          aria-live="polite"
+          aria-atomic="false"
+        >
+          {toasts.map((toast) => (
+            <div
+              key={toast.id}
+              className={
+                toast.variant === "error"
+                  ? `${styles.toast} ${styles.toastError}`
+                  : styles.toast
+              }
+            >
+              {toast.variant === "error" ? (
+                <ToastErrorIcon />
+              ) : (
+                <ToastSuccessIcon />
+              )}
+              <span>{toast.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
       <main className={styles.main}>
         {loading && <p>Checking login status...</p>}
         {error && <p className={styles.error}>{error}</p>}
@@ -1301,34 +1461,7 @@ export default function Home() {
                 </button>
               </div>
 
-              {(upgradeError || upgradeMessage) && (
-                <div className={styles.upgraderStatus}>
-                  {upgradeError && (
-                    <p className={styles.upgraderStatusLoss}>{upgradeError}</p>
-                  )}
-                  {upgradeMessage && wheelState === "win" && (
-                    <p className={styles.upgraderStatusWin}>{upgradeMessage}</p>
-                  )}
-                  {upgradeMessage && wheelState === "loss" && (
-                    <p className={styles.upgraderStatusLoss}>{upgradeMessage}</p>
-                  )}
-                  {upgradeMessage && wheelState !== "win" && wheelState !== "loss" && (
-                    <p>{upgradeMessage}</p>
-                  )}
-                </div>
-              )}
             </section>
-
-            {(actionMessage || actionError) && (
-              <div
-                className={`${styles.toastNotice} ${
-                  actionError ? styles.toastDanger : styles.toastSuccess
-                }`}
-              >
-                {actionMessage && <p>{actionMessage}</p>}
-                {actionError && <p>{actionError}</p>}
-              </div>
-            )}
 
             {/* My Skins / Shop tabs + Target */}
             <div className={styles.gameGrid}>
@@ -1391,7 +1524,7 @@ export default function Home() {
                 }
                 count={
                   inventoryTab === "mine"
-                    ? inventory.length
+                    ? ownedInventory.length
                     : skinsPagination?.total
                 }
                 total={
@@ -1562,17 +1695,29 @@ export default function Home() {
                       }
                     />
                   ) : (
-                    <SkinPager
-                      page={shopPage}
-                      totalPages={shopTotalPages}
-                      rangeFrom={shopRangeFrom}
-                      rangeTo={shopRangeTo}
-                      total={skinsPagination?.total ?? 0}
-                      onPrev={() => changeShopPage(Math.max(1, shopPage - 1))}
-                      onNext={() =>
-                        changeShopPage(Math.min(shopTotalPages, shopPage + 1))
-                      }
-                    />
+                    <>
+                      <div className={styles.shopBulkBar}>
+                        <button
+                          type="button"
+                          className={`${styles.skinTileActionBtn} ${styles.skinTileActionPrimary} ${styles.shopBulkBuyBtn}`}
+                          disabled={bulkBuyDisabled}
+                          onClick={buySelectedShopSkins}
+                        >
+                          {bulkBuyLabel}
+                        </button>
+                      </div>
+                      <SkinPager
+                        page={shopPage}
+                        totalPages={shopTotalPages}
+                        rangeFrom={shopRangeFrom}
+                        rangeTo={shopRangeTo}
+                        total={skinsPagination?.total ?? 0}
+                        onPrev={() => changeShopPage(Math.max(1, shopPage - 1))}
+                        onNext={() =>
+                          changeShopPage(Math.min(shopTotalPages, shopPage + 1))
+                        }
+                      />
+                    </>
                   )
                 }
               >
@@ -1589,9 +1734,9 @@ export default function Home() {
                     <p className={styles.skinContainerError}>
                       {inventoryError}
                     </p>
-                  ) : inventory.length === 0 ? (
+                  ) : ownedInventory.length === 0 ? (
                     <p className={styles.skinContainerEmpty}>
-                      No skins yet. Switch to the Shop tab to buy one.
+                      No available skins. Switch to the Shop tab to buy one.
                     </p>
                   ) : inventoryPageItems.length === 0 ? (
                     <p className={styles.skinContainerEmpty}>
@@ -1647,29 +1792,7 @@ export default function Home() {
                     ) : (
                       <div className={styles.skinTileGrid}>
                         {skins.map((skin) => {
-                          const balance = wallet
-                            ? Number(wallet.wallet.balance)
-                            : null;
-                          const price = Number(skin.priceRub);
-                          const isWalletLoading = Boolean(
-                            user && walletLoading,
-                          );
-                          const hasEnoughBalance =
-                            !user ||
-                            (balance !== null &&
-                              Number.isFinite(balance) &&
-                              Number.isFinite(price) &&
-                              balance >= price);
-                          const isBuying = buyingSkinId === skin.id;
-                          const buyLabel = !user
-                            ? "Log in to buy"
-                            : isBuying
-                              ? "Buying…"
-                              : isWalletLoading
-                                ? "Loading…"
-                                : hasEnoughBalance
-                                  ? `Buy ${formatMoney(skin.priceRub, "RUB")}`
-                                  : "Not enough balance";
+                          const isSelected = selectedShopSkins.has(skin.id);
                           return (
                             <SkinTile
                               key={skin.id}
@@ -1677,21 +1800,10 @@ export default function Home() {
                               rarityKey={getSkinRarityKey(skin.rarity)}
                               priceLabel={formatMoney(skin.priceRub, "RUB")}
                               wearLabel={skin.exterior ?? null}
-                              selectable={false}
-                              actions={
-                                <button
-                                  type="button"
-                                  className={`${styles.skinTileActionBtn} ${styles.skinTileActionPrimary}`}
-                                  disabled={
-                                    isBuying ||
-                                    isWalletLoading ||
-                                    !hasEnoughBalance
-                                  }
-                                  onClick={() => buySkin(skin.id)}
-                                >
-                                  {buyLabel}
-                                </button>
-                              }
+                              selected={isSelected}
+                              selectable={!bulkBuying}
+                              disabled={bulkBuying}
+                              onSelect={() => toggleShopSkinSelection(skin)}
                             />
                           );
                         })}
@@ -1701,7 +1813,29 @@ export default function Home() {
                 )}
               </SkinContainer>
 
-              <SkinContainer title="Target" count={upgradeOptions.length}>
+              <SkinContainer
+                title="Target"
+                count={upgradeOptions.length}
+                footer={
+                  upgradeOptions.length > TARGET_PAGE_SIZE ? (
+                    <SkinPager
+                      page={safeTargetPage}
+                      totalPages={targetTotalPages}
+                      rangeFrom={targetRangeFrom}
+                      rangeTo={targetRangeTo}
+                      total={upgradeOptions.length}
+                      onPrev={() =>
+                        setTargetPage(Math.max(1, safeTargetPage - 1))
+                      }
+                      onNext={() =>
+                        setTargetPage(
+                          Math.min(targetTotalPages, safeTargetPage + 1),
+                        )
+                      }
+                    />
+                  ) : null
+                }
+              >
                 {!user ? (
                   <p className={styles.skinContainerEmpty}>
                     Log in with Steam to see upgrade targets.
@@ -1724,7 +1858,7 @@ export default function Home() {
                   </p>
                 ) : (
                   <div className={styles.skinTileGrid}>
-                    {upgradeOptions.map((skin) => {
+                    {targetPageItems.map((skin) => {
                       const isSelected = skin.id === selectedTargetSkinId;
                       return (
                         <SkinTile
@@ -1732,7 +1866,6 @@ export default function Home() {
                           skin={skin}
                           rarityKey={getSkinRarityKey(skin.rarity)}
                           priceLabel={formatMoney(skin.receivedValueRub, "RUB")}
-                          priceSubLabel={`Market ${formatMoney(skin.priceRub, "RUB")}`}
                           wearLabel={skin.exterior ?? null}
                           selected={isSelected}
                           selectable={!targetSelectionLocked}
