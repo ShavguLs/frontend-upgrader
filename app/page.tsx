@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
 import Navbar from "./components/Navbar";
@@ -88,19 +95,13 @@ type BuySkinResponse = {
   wallet: Wallet;
 };
 
-type SellInventoryItemResponse = {
-  item: InventoryItem;
-  wallet: Wallet;
-};
-
-type WithdrawInventoryItemResponse = {
-  item: InventoryItem;
-  withdrawal: { id: number; status: string; provider: string };
-};
-
 type UpgradeChanceTier = 10 | 25 | 50 | 75;
 
 const UPGRADER_CHANCE_TIERS: UpgradeChanceTier[] = [10, 25, 50, 75];
+const INVENTORY_PAGE_SIZE = 12;
+const SHOP_PAGE_SIZE = 24;
+const WHEEL_SPIN_DURATION_MS = 3400;
+const WHEEL_FINALIZE_MS = 3500;
 
 type UpgradeOptionSkin = Skin & {
   receivedValueRub: string | number;
@@ -127,6 +128,10 @@ type UpgradeAttemptResponse = {
   };
 };
 
+type InventorySort = "price-desc" | "price-asc" | "name";
+type WheelState = "idle" | "spinning" | "win" | "loss";
+type InventoryTab = "mine" | "shop";
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -147,16 +152,6 @@ function formatMoney(value: string | number, currency: string) {
   }
 }
 
-function formatDate(value: string) {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
-}
-
 async function getResponseError(res: Response, fallback: string) {
   try {
     const data = (await res.json()) as { message?: string | string[] };
@@ -175,19 +170,371 @@ async function getResponseError(res: Response, fallback: string) {
   return fallback;
 }
 
-function SkinImage({ skin }: { skin: Skin }) {
+function getSkinRarityKey(rarity?: string | null): string {
+  if (!rarity) return "milspec";
+  const v = rarity.toLowerCase();
+  if (v.includes("consumer")) return "consumer";
+  if (v.includes("industrial")) return "industrial";
+  if (v.includes("mil-spec") || v.includes("milspec")) return "milspec";
+  if (v.includes("restricted")) return "restricted";
+  if (v.includes("classified")) return "classified";
+  if (v.includes("covert")) return "covert";
+  if (v.includes("contraband")) return "contraband";
+  if (
+    v.includes("extraordinary") ||
+    v.includes("knife") ||
+    v.includes("gloves") ||
+    v.includes("special") ||
+    v.includes("★")
+  ) {
+    return "special";
+  }
+  return "milspec";
+}
+
+function sortInventoryItems(
+  items: InventoryItem[],
+  sort: InventorySort,
+): InventoryItem[] {
+  const copy = items.slice();
+  if (sort === "price-desc") {
+    copy.sort((a, b) => Number(b.sellPriceRub) - Number(a.sellPriceRub));
+  } else if (sort === "price-asc") {
+    copy.sort((a, b) => Number(a.sellPriceRub) - Number(b.sellPriceRub));
+  } else if (sort === "name") {
+    copy.sort((a, b) => a.skin.name.localeCompare(b.skin.name));
+  }
+  return copy;
+}
+
+function filterInventoryItems(
+  items: InventoryItem[],
+  search: string,
+  min: number | null,
+  max: number | null,
+): InventoryItem[] {
+  const q = search.trim().toLowerCase();
+  return items.filter((item) => {
+    const price = Number(item.sellPriceRub);
+    if (min !== null && Number.isFinite(price) && price < min) return false;
+    if (max !== null && Number.isFinite(price) && price > max) return false;
+    if (q !== "") {
+      const hay = [
+        item.skin.name,
+        item.skin.weapon,
+        item.skin.exterior,
+        item.skin.marketHashName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function computeNextWheelRotation(
+  currentRotation: number,
+  chancePercent: number,
+  win: boolean,
+): number {
+  const chanceFrac = Math.max(0, Math.min(1, chancePercent / 100));
+  const winEnd = chanceFrac * 360;
+  const segStart = win ? 0 : winEnd;
+  const segEnd = win ? winEnd : 360;
+  const segSize = Math.max(0, segEnd - segStart);
+  const margin = Math.max(2, segSize * 0.1);
+  const usable = Math.max(0, segSize - 2 * margin);
+  const target = segStart + margin + Math.random() * usable;
+  const currentMod = (((-currentRotation) % 360) + 360) % 360;
+  const delta = 5 * 360 + target - currentMod;
+  return currentRotation - delta;
+}
+
+function SkinTileImage({ skin }: { skin: Skin }) {
   if (!skin.imageUrl) {
-    return <div className={styles.skinImagePlaceholder}>No image</div>;
+    return (
+      <div className={styles.skinTileImagePlaceholder}>No image</div>
+    );
   }
 
   return (
-    <Image
-      className={styles.skinImage}
-      src={skin.imageUrl}
-      alt={skin.name}
-      fill
-      sizes="(max-width: 700px) 100vw, (max-width: 1100px) 50vw, 25vw"
-    />
+    <div className={styles.skinTileImage}>
+      <Image
+        src={skin.imageUrl}
+        alt={skin.name}
+        fill
+        sizes="(max-width: 540px) 50vw, (max-width: 1200px) 33vw, 25vw"
+        style={{ objectFit: "contain" }}
+      />
+    </div>
+  );
+}
+
+function UpgraderSlotImage({ skin }: { skin: Skin }) {
+  if (!skin.imageUrl) {
+    return null;
+  }
+
+  return (
+    <div className={styles.upgraderSlotImage}>
+      <Image
+        src={skin.imageUrl}
+        alt={skin.name}
+        fill
+        sizes="220px"
+        style={{ objectFit: "contain" }}
+      />
+    </div>
+  );
+}
+
+type SkinTileProps = {
+  skin: Skin;
+  rarityKey: string;
+  priceLabel: string;
+  priceSubLabel?: string;
+  wearLabel?: string | null;
+  statusLabel?: string | null;
+  selected?: boolean;
+  disabled?: boolean;
+  selectable?: boolean;
+  onSelect?: () => void;
+  actions?: ReactNode;
+};
+
+function SkinTile({
+  skin,
+  rarityKey,
+  priceLabel,
+  priceSubLabel,
+  wearLabel,
+  statusLabel,
+  selected,
+  disabled,
+  selectable,
+  onSelect,
+  actions,
+}: SkinTileProps) {
+  const classes = [styles.skinTile];
+  if (selected) classes.push(styles.skinTileSelected);
+  if (disabled) classes.push(styles.skinTileDisabled);
+
+  return (
+    <article className={classes.join(" ")} data-rarity={rarityKey}>
+      <button
+        type="button"
+        className={styles.skinTileButton}
+        onClick={selectable ? onSelect : undefined}
+        disabled={disabled || !selectable}
+        aria-pressed={selected ? true : undefined}
+      >
+        <div className={styles.skinTileMain}>
+          <span className={styles.skinTileBar} aria-hidden="true" />
+          <SkinTileImage skin={skin} />
+          {wearLabel && (
+            <span className={styles.skinTileWear}>{wearLabel}</span>
+          )}
+          {statusLabel && (
+            <span className={styles.skinTileStatus}>{statusLabel}</span>
+          )}
+          <div className={styles.skinTileInfo}>
+            {skin.weapon && (
+              <span className={styles.skinTileWeapon}>{skin.weapon}</span>
+            )}
+            <span className={styles.skinTileName}>{skin.name}</span>
+            <span className={styles.skinTilePrice}>{priceLabel}</span>
+            {priceSubLabel && (
+              <span className={styles.skinTilePriceSub}>{priceSubLabel}</span>
+            )}
+          </div>
+        </div>
+      </button>
+      {actions && <div className={styles.skinTileActions}>{actions}</div>}
+    </article>
+  );
+}
+
+type SkinContainerProps = {
+  title?: ReactNode;
+  headerLeft?: ReactNode;
+  count?: number;
+  total?: string;
+  totalLabel?: string;
+  toolbar?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+};
+
+function SkinContainer({
+  title,
+  headerLeft,
+  count,
+  total,
+  totalLabel,
+  toolbar,
+  children,
+  footer,
+}: SkinContainerProps) {
+  return (
+    <section className={styles.skinContainer}>
+      <header className={styles.skinContainerHead}>
+        {headerLeft ?? (title ? <h3>{title}</h3> : null)}
+        {typeof count === "number" && (
+          <span className={styles.skinContainerCount}>{count}</span>
+        )}
+        {total && (
+          <span className={styles.skinContainerTotal}>
+            {totalLabel && <small>{totalLabel}</small>}
+            {total}
+          </span>
+        )}
+      </header>
+      {toolbar && <div className={styles.skinToolbar}>{toolbar}</div>}
+      {children}
+      {footer}
+    </section>
+  );
+}
+
+type SkinPagerProps = {
+  page: number;
+  totalPages: number;
+  rangeFrom: number;
+  rangeTo: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
+};
+
+function SkinPager({
+  page,
+  totalPages,
+  rangeFrom,
+  rangeTo,
+  total,
+  onPrev,
+  onNext,
+}: SkinPagerProps) {
+  if (total === 0) return null;
+  return (
+    <div className={styles.skinPager}>
+      <span className={styles.skinPagerInfo}>
+        <b>
+          {rangeFrom}–{rangeTo}
+        </b>{" "}
+        of <b>{total}</b>
+      </span>
+      <div className={styles.skinPagerCtrls}>
+        <button
+          type="button"
+          className={styles.skinPagerBtn}
+          onClick={onPrev}
+          disabled={page <= 1}
+          aria-label="Previous page"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="15 6 9 12 15 18" />
+          </svg>
+        </button>
+        <span className={styles.skinPagerPage}>
+          <span>{page}</span>
+          <span className="of">/</span>
+          <span>{totalPages}</span>
+        </span>
+        <button
+          type="button"
+          className={styles.skinPagerBtn}
+          onClick={onNext}
+          disabled={page >= totalPages}
+          aria-label="Next page"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="9 6 15 12 9 18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type UpgraderSlotProps = {
+  side: "source" | "target";
+  skin: Skin | null;
+  priceLabel?: string;
+};
+
+function UpgraderSlot({ side, skin, priceLabel }: UpgraderSlotProps) {
+  const classes = [styles.upgraderSlot];
+  if (skin) classes.push(styles.upgraderSlotFilled);
+  const label = side === "source" ? "Your Skin" : "Target";
+  const rarityKey = skin ? getSkinRarityKey(skin.rarity) : undefined;
+
+  return (
+    <div className={classes.join(" ")} data-rarity={rarityKey}>
+      <span className={styles.upgraderSlotLabel}>{label}</span>
+      {skin ? (
+        <>
+          <UpgraderSlotImage skin={skin} />
+          <div className={styles.upgraderSlotInfo}>
+            {skin.weapon && (
+              <span className={styles.upgraderSlotWeapon}>{skin.weapon}</span>
+            )}
+            <span className={styles.upgraderSlotName}>{skin.name}</span>
+            {priceLabel && (
+              <span className={styles.upgraderSlotPrice}>{priceLabel}</span>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className={styles.upgraderSlotPlaceholder}>
+          <svg
+            viewBox="0 0 24 24"
+            width="28"
+            height="28"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            {side === "source" ? (
+              <>
+                <path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+                <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+              </>
+            ) : (
+              <>
+                <circle cx="12" cy="12" r="9" />
+                <circle cx="12" cy="12" r="5" />
+                <circle cx="12" cy="12" r="1.4" fill="currentColor" />
+              </>
+            )}
+          </svg>
+          <span>
+            Pick from
+            <br />
+            {side === "source" ? "My Skins" : "Target"}
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -208,28 +555,62 @@ export default function Home() {
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
   const [buyingSkinId, setBuyingSkinId] = useState<number | null>(null);
-  const [sellingItemId, setSellingItemId] = useState<number | null>(null);
-  const [withdrawingItemId, setWithdrawingItemId] = useState<number | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [minPriceRubInput, setMinPriceRubInput] = useState("");
-  const [maxPriceRubInput, setMaxPriceRubInput] = useState("");
-  const [catalogSearchInput, setCatalogSearchInput] = useState("");
-  const [catalogFilterError, setCatalogFilterError] = useState<string | null>(null);
-  const [catalogFilterActive, setCatalogFilterActive] = useState(false);
-  const [selectedUpgradeItemId, setSelectedUpgradeItemId] = useState<number | null>(null);
-  const [selectedUpgradeChance, setSelectedUpgradeChance] = useState<UpgradeChanceTier | null>(null);
+
+  // Shop filters (server-side)
+  const [shopSearchInput, setShopSearchInput] = useState("");
+  const [shopMinInput, setShopMinInput] = useState("");
+  const [shopMaxInput, setShopMaxInput] = useState("");
+  const [shopPage, setShopPage] = useState(1);
+  const [shopFilterError, setShopFilterError] = useState<string | null>(null);
+  const [shopFilterActive, setShopFilterActive] = useState(false);
+
+  // My Skins client-side filters
+  const [inventorySearchInput, setInventorySearchInput] = useState("");
+  const [inventoryMinInput, setInventoryMinInput] = useState("");
+  const [inventoryMaxInput, setInventoryMaxInput] = useState("");
+  const [inventorySort, setInventorySort] =
+    useState<InventorySort>("price-desc");
+  const [inventoryPage, setInventoryPage] = useState(1);
+  const [inventoryTab, setInventoryTab] = useState<InventoryTab>("mine");
+
+  // Upgrader
+  const [selectedUpgradeItemId, setSelectedUpgradeItemId] = useState<
+    number | null
+  >(null);
+  const [selectedUpgradeChance, setSelectedUpgradeChance] =
+    useState<UpgradeChanceTier>(25);
   const [upgradeOptions, setUpgradeOptions] = useState<UpgradeOptionSkin[]>([]);
-  const [selectedTargetSkinId, setSelectedTargetSkinId] = useState<number | null>(null);
+  const [selectedTargetSkinId, setSelectedTargetSkinId] = useState<
+    number | null
+  >(null);
   const [upgradeOptionsLoading, setUpgradeOptionsLoading] = useState(false);
-  const [upgradeOptionsError, setUpgradeOptionsError] = useState<string | null>(null);
+  const [upgradeOptionsError, setUpgradeOptionsError] = useState<string | null>(
+    null,
+  );
   const [upgradeLoading, setUpgradeLoading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [upgradeMessage, setUpgradeMessage] = useState<string | null>(null);
-  const [upgradeResult, setUpgradeResult] = useState<UpgradeAttemptResponse | null>(null);
+
+  // Wheel
+  const [wheelState, setWheelState] = useState<WheelState>("idle");
+  const [wheelRotation, setWheelRotation] = useState(0);
+  const [wheelChancePercent, setWheelChancePercent] = useState<number>(25);
+  const wheelTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const upgradeOptionsRequestId = useRef(0);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpKey, setTopUpKey] = useState(0);
+
+  useEffect(() => {
+    return () => {
+      if (wheelTimeoutRef.current) {
+        clearTimeout(wheelTimeoutRef.current);
+      }
+    };
+  }, []);
+
   function handleTopUp() {
     if (!user) {
       window.location.assign(`${API_BASE}/auth/steam`);
@@ -252,13 +633,11 @@ export default function Home() {
     setInventory([]);
     setInventoryError(null);
     setSelectedUpgradeItemId(null);
-    setSelectedUpgradeChance(null);
     setSelectedTargetSkinId(null);
     setUpgradeOptions([]);
     setUpgradeOptionsError(null);
     setUpgradeError(null);
     setUpgradeMessage(null);
-    setUpgradeResult(null);
     setTopUpOpen(false);
   }
 
@@ -368,7 +747,7 @@ export default function Home() {
       }
     }
 
-    doFetchSkins("", "", "");
+    doFetchSkins("", "", "", 1);
     checkAuth();
 
     return () => {
@@ -376,9 +755,17 @@ export default function Home() {
     };
   }, []);
 
-  async function doFetchSkins(search: string, min: string, max: string) {
+  async function doFetchSkins(
+    search: string,
+    min: string,
+    max: string,
+    page: number,
+  ) {
     const requestId = ++skinsRequestId.current;
-    const params = new URLSearchParams({ limit: "24" });
+    const params = new URLSearchParams({
+      limit: String(SHOP_PAGE_SIZE),
+      page: String(page),
+    });
     if (search !== "") params.set("search", search);
     if (min !== "") params.set("minPriceRub", min);
     if (max !== "") params.set("maxPriceRub", max);
@@ -406,42 +793,44 @@ export default function Home() {
     }
   }
 
-  function applyFilter() {
-    const search = catalogSearchInput.trim();
-    const min = minPriceRubInput.trim();
-    const max = maxPriceRubInput.trim();
+  function applyShopFilter() {
+    const search = shopSearchInput.trim();
+    const min = shopMinInput.trim();
+    const max = shopMaxInput.trim();
 
     if (min !== "") {
       const v = Number(min);
       if (!Number.isFinite(v) || v < 0) {
-        setCatalogFilterError("Min price must be a number ≥ 0.");
+        setShopFilterError("Min price must be a number ≥ 0.");
         return;
       }
     }
     if (max !== "") {
       const v = Number(max);
       if (!Number.isFinite(v) || v < 0) {
-        setCatalogFilterError("Max price must be a number ≥ 0.");
+        setShopFilterError("Max price must be a number ≥ 0.");
         return;
       }
     }
     if (min !== "" && max !== "" && Number(min) > Number(max)) {
-      setCatalogFilterError("Min price cannot be greater than max price.");
+      setShopFilterError("Min price cannot be greater than max price.");
       return;
     }
 
-    setCatalogFilterError(null);
-    setCatalogFilterActive(search !== "" || min !== "" || max !== "");
-    doFetchSkins(search, min, max);
+    setShopFilterError(null);
+    setShopFilterActive(search !== "" || min !== "" || max !== "");
+    setShopPage(1);
+    doFetchSkins(search, min, max, 1);
   }
 
-  function clearFilter() {
-    setCatalogSearchInput("");
-    setMinPriceRubInput("");
-    setMaxPriceRubInput("");
-    setCatalogFilterError(null);
-    setCatalogFilterActive(false);
-    doFetchSkins("", "", "");
+  function changeShopPage(nextPage: number) {
+    setShopPage(nextPage);
+    doFetchSkins(
+      shopSearchInput.trim(),
+      shopMinInput.trim(),
+      shopMaxInput.trim(),
+      nextPage,
+    );
   }
 
   async function logout() {
@@ -452,15 +841,11 @@ export default function Home() {
         credentials: "include",
       });
       if (res.ok) {
-        setUser(null);
-        setWallet(null);
+        clearSessionState();
         setWalletLoading(false);
-        setInventory([]);
         setInventoryLoading(false);
-        setInventoryError(null);
         setActionMessage(null);
         setActionError(null);
-        setTopUpOpen(false);
       } else {
         setError("Logout failed.");
       }
@@ -517,58 +902,6 @@ export default function Home() {
     );
   }
 
-  async function withdrawInventoryItem(inventoryItemId: number) {
-    setActionError(null);
-    setActionMessage(null);
-    setWithdrawingItemId(inventoryItemId);
-
-    try {
-      const res = await fetch(`${API_BASE}/inventory/withdraw`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inventoryItemId }),
-      });
-
-      if (res.status === 401) {
-        clearSessionState();
-        setActionError("Please log in with Steam to withdraw skins.");
-        return;
-      }
-
-      if (!res.ok) {
-        setActionError(
-          await getResponseError(res, "Could not start withdrawal."),
-        );
-        return;
-      }
-
-      const data = (await res.json()) as WithdrawInventoryItemResponse;
-      setInventory((current) =>
-        current.map((item) =>
-          item.id === data.item.id
-            ? { ...item, status: data.item.status }
-            : item,
-        ),
-      );
-      if (
-        selectedUpgradeItemId === data.item.id &&
-        data.item.status !== "owned"
-      ) {
-        setSelectedUpgradeItemId(null);
-        setSelectedTargetSkinId(null);
-        setUpgradeOptions([]);
-      }
-      setActionMessage(
-        "Withdrawal started. Accept the Steam trade offer before it expires.",
-      );
-    } catch {
-      setActionError("Could not reach the server.");
-    } finally {
-      setWithdrawingItemId(null);
-    }
-  }
-
   async function loadUpgradeOptions(
     itemId: number | null,
     chance: UpgradeChanceTier | null,
@@ -622,38 +955,56 @@ export default function Home() {
   }
 
   function selectUpgradeItem(itemId: number) {
+    if (upgradeLoading) return;
     setUpgradeError(null);
     setUpgradeMessage(null);
-    setUpgradeResult(null);
     setSelectedTargetSkinId(null);
+    setWheelState("idle");
     const next = selectedUpgradeItemId === itemId ? null : itemId;
     setSelectedUpgradeItemId(next);
     void loadUpgradeOptions(next, selectedUpgradeChance);
   }
 
   function selectUpgradeChance(chance: UpgradeChanceTier) {
+    if (upgradeLoading) return;
     setUpgradeError(null);
     setUpgradeMessage(null);
-    setUpgradeResult(null);
     setSelectedTargetSkinId(null);
-    const next = selectedUpgradeChance === chance ? null : chance;
-    setSelectedUpgradeChance(next);
-    void loadUpgradeOptions(selectedUpgradeItemId, next);
+    setWheelState("idle");
+    setSelectedUpgradeChance(chance);
+    setWheelChancePercent(chance);
+    void loadUpgradeOptions(selectedUpgradeItemId, chance);
+  }
+
+  function selectUpgradeTarget(skinId: number) {
+    if (upgradeLoading) return;
+    setUpgradeError(null);
+    setUpgradeMessage(null);
+    setWheelState("idle");
+    setSelectedTargetSkinId((current) =>
+      current === skinId ? null : skinId,
+    );
   }
 
   async function performUpgrade() {
     if (
       selectedUpgradeItemId === null ||
       selectedTargetSkinId === null ||
-      selectedUpgradeChance === null
+      selectedUpgradeChance === null ||
+      upgradeLoading
     ) {
       return;
     }
 
+    if (wheelTimeoutRef.current) {
+      clearTimeout(wheelTimeoutRef.current);
+      wheelTimeoutRef.current = null;
+    }
+
     setUpgradeError(null);
     setUpgradeMessage(null);
-    setUpgradeResult(null);
     setUpgradeLoading(true);
+    setWheelState("idle");
 
     try {
       const res = await fetch(`${API_BASE}/upgrader/attempt`, {
@@ -670,6 +1021,7 @@ export default function Home() {
       if (res.status === 401) {
         clearSessionState();
         setUpgradeError("Please log in with Steam to upgrade skins.");
+        setUpgradeLoading(false);
         return;
       }
 
@@ -677,74 +1029,170 @@ export default function Home() {
         setUpgradeError(
           await getResponseError(res, "Could not run the upgrade."),
         );
+        setUpgradeLoading(false);
         return;
       }
 
       const data = (await res.json()) as UpgradeAttemptResponse;
-      setUpgradeResult(data);
-      setInventory((current) => {
-        const withoutSource = current.filter((item) => item.id !== data.sourceItem.id);
-        if (data.result === "win" && data.wonItem) {
-          return [data.wonItem, ...withoutSource];
-        }
-        return withoutSource;
-      });
-      setSelectedUpgradeItemId(null);
-      setSelectedTargetSkinId(null);
-      setUpgradeOptions([]);
-      setUpgradeMessage(
-        data.result === "win"
-          ? `Upgrade won. ${data.targetSkin.name} added to your inventory.`
-          : `Upgrade lost. ${data.sourceItem.skin.name} was consumed.`,
+
+      const chancePercent = Number(data.displayedChancePercent);
+      const safeChancePercent = Number.isFinite(chancePercent)
+        ? chancePercent
+        : selectedUpgradeChance;
+      setWheelChancePercent(safeChancePercent);
+      setWheelState("spinning");
+      setWheelRotation((current) =>
+        computeNextWheelRotation(current, safeChancePercent, data.result === "win"),
       );
+
+      wheelTimeoutRef.current = setTimeout(() => {
+        wheelTimeoutRef.current = null;
+        setWheelState(data.result);
+        setInventory((current) => {
+          const withoutSource = current.filter(
+            (item) => item.id !== data.sourceItem.id,
+          );
+          if (data.result === "win" && data.wonItem) {
+            return [data.wonItem, ...withoutSource];
+          }
+          return withoutSource;
+        });
+        setSelectedUpgradeItemId(null);
+        setSelectedTargetSkinId(null);
+        setUpgradeOptions([]);
+        setUpgradeMessage(
+          data.result === "win"
+            ? `Won! ${data.targetSkin.name} added to your inventory.`
+            : `Lost ${data.sourceItem.skin.name}.`,
+        );
+        setUpgradeLoading(false);
+      }, WHEEL_FINALIZE_MS);
     } catch {
       setUpgradeError("Could not reach the server.");
-    } finally {
       setUpgradeLoading(false);
     }
   }
 
-  async function sellInventoryItem(inventoryItemId: number) {
-    setActionError(null);
-    setActionMessage(null);
-    setSellingItemId(inventoryItemId);
+  // Derived data
+  const inventoryMinNum = useMemo(() => {
+    const v = Number(inventoryMinInput);
+    return inventoryMinInput.trim() !== "" && Number.isFinite(v) ? v : null;
+  }, [inventoryMinInput]);
+  const inventoryMaxNum = useMemo(() => {
+    const v = Number(inventoryMaxInput);
+    return inventoryMaxInput.trim() !== "" && Number.isFinite(v) ? v : null;
+  }, [inventoryMaxInput]);
 
-    try {
-      const res = await fetch(`${API_BASE}/inventory/sell`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inventoryItemId }),
-      });
+  const filteredInventory = useMemo(() => {
+    const filtered = filterInventoryItems(
+      inventory,
+      inventorySearchInput,
+      inventoryMinNum,
+      inventoryMaxNum,
+    );
+    return sortInventoryItems(filtered, inventorySort);
+  }, [
+    inventory,
+    inventorySearchInput,
+    inventoryMinNum,
+    inventoryMaxNum,
+    inventorySort,
+  ]);
 
-      if (res.status === 401) {
-        clearSessionState();
-        setActionError("Please log in with Steam to sell skins.");
-        return;
-      }
+  const inventoryTotalPages = Math.max(
+    1,
+    Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE),
+  );
+  const safeInventoryPage = Math.min(
+    Math.max(1, inventoryPage),
+    inventoryTotalPages,
+  );
 
-      if (!res.ok) {
-        setActionError(await getResponseError(res, "Could not sell skin."));
-        return;
-      }
+  const inventoryPageItems = useMemo(() => {
+    const start = (safeInventoryPage - 1) * INVENTORY_PAGE_SIZE;
+    return filteredInventory.slice(start, start + INVENTORY_PAGE_SIZE);
+  }, [filteredInventory, safeInventoryPage]);
 
-      const data = (await res.json()) as SellInventoryItemResponse;
-      updateWallet(data.wallet);
-      setInventory((current) =>
-        current.filter((item) => item.id !== data.item.id),
-      );
-      if (selectedUpgradeItemId === data.item.id) {
-        setSelectedUpgradeItemId(null);
-        setSelectedTargetSkinId(null);
-        setUpgradeOptions([]);
-      }
-      setActionMessage(`${data.item.skin.name} sold successfully.`);
-    } catch {
-      setActionError("Could not reach the server.");
-    } finally {
-      setSellingItemId(null);
-    }
-  }
+  const inventoryTotalValue = useMemo(() => {
+    return inventory.reduce(
+      (sum, item) => sum + (Number(item.sellPriceRub) || 0),
+      0,
+    );
+  }, [inventory]);
+
+  const selectedSource = useMemo(
+    () =>
+      inventory.find((item) => item.id === selectedUpgradeItemId) ?? null,
+    [inventory, selectedUpgradeItemId],
+  );
+  const selectedTarget = useMemo(
+    () => upgradeOptions.find((s) => s.id === selectedTargetSkinId) ?? null,
+    [upgradeOptions, selectedTargetSkinId],
+  );
+
+  const sourceLocked = upgradeLoading;
+  const chanceLocked = upgradeLoading;
+  const targetSelectionLocked = upgradeLoading;
+
+  const multiplier =
+    selectedUpgradeChance && selectedUpgradeChance > 0
+      ? 100 / selectedUpgradeChance
+      : 0;
+
+  const upgradeReady =
+    selectedSource && selectedTarget && !upgradeLoading;
+
+  const wheelChanceFrac = Math.max(
+    0,
+    Math.min(1, wheelChancePercent / 100),
+  );
+  const wheelStyle: CSSProperties = {
+    transform: `rotate(${wheelRotation}deg)`,
+    transition:
+      wheelState === "spinning"
+        ? `transform ${WHEEL_SPIN_DURATION_MS}ms cubic-bezier(0.16, 0.85, 0.18, 1)`
+        : "none",
+    ["--chance" as string]: wheelChanceFrac.toFixed(3),
+  };
+
+  const wheelClasses = [styles.upgraderWheel];
+  if (wheelState === "win") wheelClasses.push(styles.upgraderWheelWin);
+  if (wheelState === "loss") wheelClasses.push(styles.upgraderWheelLoss);
+
+  const readoutPctClasses = [styles.upgraderReadoutPct];
+  if (wheelState === "win") readoutPctClasses.push(styles.upgraderReadoutPctWin);
+  if (wheelState === "loss")
+    readoutPctClasses.push(styles.upgraderReadoutPctLoss);
+
+  const readoutLabel =
+    wheelState === "spinning"
+      ? "Spinning…"
+      : wheelState === "win"
+        ? "Won"
+        : wheelState === "loss"
+          ? "Lost"
+          : "Chance";
+
+  const shopTotalPages = skinsPagination
+    ? Math.max(1, skinsPagination.totalPages)
+    : 1;
+
+  const inventoryRangeFrom =
+    filteredInventory.length === 0
+      ? 0
+      : (safeInventoryPage - 1) * INVENTORY_PAGE_SIZE + 1;
+  const inventoryRangeTo = Math.min(
+    safeInventoryPage * INVENTORY_PAGE_SIZE,
+    filteredInventory.length,
+  );
+
+  const shopRangeFrom =
+    skinsPagination && skinsPagination.total > 0
+      ? (shopPage - 1) * SHOP_PAGE_SIZE + 1
+      : 0;
+  const shopRangeTo = skinsPagination
+    ? Math.min(shopPage * SHOP_PAGE_SIZE, skinsPagination.total)
+    : 0;
 
   return (
     <div className={styles.page}>
@@ -762,440 +1210,543 @@ export default function Home() {
         {!loading && !user && (
           <div className={styles.authSection}>
             <h1>CS2 Gambler</h1>
-            <p className={styles.eyebrow}>Log in with Steam from the top navbar to get started.</p>
+            <p className={styles.eyebrow}>
+              Log in with Steam from the top navbar to get started.
+            </p>
           </div>
         )}
-        {!loading && user && (
-          <div className={styles.dashboard}>
-            <section className={styles.card}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.eyebrow}>Inventory</p>
-                  <h2>Your skins</h2>
+
+        {!loading && (
+          <div className={styles.gamePage}>
+            {/* Upgrader panel */}
+            <section className={styles.upgraderShell}>
+              <header className={styles.upgraderHead}>
+                <h3>Upgrader</h3>
+                <span className={styles.upgraderMultiplier}>
+                  Multiplier{" "}
+                  <b>{multiplier > 0 ? `${multiplier.toFixed(2)}×` : "0×"}</b>
+                </span>
+              </header>
+
+              <div className={styles.upgraderRow}>
+                <UpgraderSlot
+                  side="source"
+                  skin={selectedSource?.skin ?? null}
+                  priceLabel={
+                    selectedSource
+                      ? formatMoney(selectedSource.sellPriceRub, "RUB")
+                      : undefined
+                  }
+                />
+
+                <div className={styles.upgraderWheelWrap}>
+                  <div className={styles.upgraderPointer} aria-hidden="true" />
+                  <div className={wheelClasses.join(" ")} style={wheelStyle} />
+                  <div className={styles.upgraderReadout}>
+                    <span className={readoutPctClasses.join(" ")}>
+                      {Math.round(wheelChancePercent)}
+                      <small>%</small>
+                    </span>
+                    <span className={styles.upgraderReadoutLbl}>
+                      {readoutLabel}
+                    </span>
+                  </div>
                 </div>
+
+                <UpgraderSlot
+                  side="target"
+                  skin={selectedTarget ?? null}
+                  priceLabel={
+                    selectedTarget
+                      ? formatMoney(selectedTarget.receivedValueRub, "RUB")
+                      : undefined
+                  }
+                />
               </div>
 
-              {inventoryLoading && <p>Loading inventory...</p>}
-              {inventoryError && (
-                <p className={styles.error}>{inventoryError}</p>
-              )}
-              {!inventoryLoading && !inventoryError && inventory.length === 0 && (
-                <p className={styles.emptyState}>No inventory items yet.</p>
-              )}
-              {!inventoryLoading && inventory.length > 0 && (
-                <div className={styles.skinGrid}>
-                  {inventory.map((item) => (
-                    <article className={styles.skinCard} key={item.id}>
-                      <div className={styles.skinImageWrap}>
-                        <SkinImage skin={item.skin} />
-                      </div>
-                      <div className={styles.skinCardBody}>
-                        <h3>{item.skin.name}</h3>
-                        <p className={styles.meta}>
-                          {item.status} / {item.source}
-                        </p>
-                        <div className={styles.skinMetaGrid}>
-                          <span>Buy {formatMoney(item.purchasePriceRub, "RUB")}</span>
-                          <span>Sell {formatMoney(item.sellPriceRub, "RUB")}</span>
-                        </div>
-                        <p className={styles.meta}>
-                          Acquired {formatDate(item.createdAt)}
-                        </p>
-                        <button
-                          className={`${styles.actionButton} ${styles.actionButtonSecondary}`}
-                          disabled={
-                            sellingItemId === item.id ||
-                            item.status !== "owned" ||
-                            withdrawingItemId === item.id
-                          }
-                          onClick={() => sellInventoryItem(item.id)}
-                        >
-                          {sellingItemId === item.id
-                            ? "Selling..."
-                            : item.status === "withdraw_pending"
-                              ? "Withdrawal pending"
-                              : `Sell for ${formatMoney(item.sellPriceRub, "RUB")}`}
-                        </button>
-                        <button
-                          className={styles.actionButton}
-                          disabled={
-                            withdrawingItemId === item.id ||
-                            item.status !== "owned" ||
-                            sellingItemId === item.id ||
-                            !user.steamTradeUrl
-                          }
-                          onClick={() => withdrawInventoryItem(item.id)}
-                          title={
-                            user.steamTradeUrl
-                              ? undefined
-                              : "Save a Steam trade URL in your profile to enable withdrawals"
-                          }
-                        >
-                          {withdrawingItemId === item.id
-                            ? "Withdrawing..."
-                            : item.status === "withdraw_pending"
-                              ? "Withdrawal pending"
-                              : "Withdraw"}
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+              <div className={styles.upgraderControls}>
+                <div className={styles.upgraderChances} role="tablist">
+                  {UPGRADER_CHANCE_TIERS.map((tier) => {
+                    const isActive = selectedUpgradeChance === tier;
+                    return (
+                      <button
+                        type="button"
+                        key={tier}
+                        role="tab"
+                        aria-selected={isActive}
+                        className={
+                          isActive
+                            ? `${styles.upgraderChancePill} ${styles.upgraderChanceActive}`
+                            : styles.upgraderChancePill
+                        }
+                        disabled={chanceLocked}
+                        onClick={() => selectUpgradeChance(tier)}
+                      >
+                        {tier}%
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className={styles.upgraderGoButton}
+                  disabled={!upgradeReady}
+                  onClick={performUpgrade}
+                >
+                  {upgradeLoading
+                    ? wheelState === "spinning"
+                      ? "Spinning…"
+                      : "Upgrading…"
+                    : "Upgrade"}
+                </button>
+              </div>
+
+              {(upgradeError || upgradeMessage) && (
+                <div className={styles.upgraderStatus}>
+                  {upgradeError && (
+                    <p className={styles.upgraderStatusLoss}>{upgradeError}</p>
+                  )}
+                  {upgradeMessage && wheelState === "win" && (
+                    <p className={styles.upgraderStatusWin}>{upgradeMessage}</p>
+                  )}
+                  {upgradeMessage && wheelState === "loss" && (
+                    <p className={styles.upgraderStatusLoss}>{upgradeMessage}</p>
+                  )}
+                  {upgradeMessage && wheelState !== "win" && wheelState !== "loss" && (
+                    <p>{upgradeMessage}</p>
+                  )}
                 </div>
               )}
             </section>
 
-            {(() => {
-              const ownedItems = inventory.filter(
-                (item) => item.status === "owned",
-              );
-              const selectedSource = ownedItems.find(
-                (item) => item.id === selectedUpgradeItemId,
-              );
-              const selectedTarget = upgradeOptions.find(
-                (skin) => skin.id === selectedTargetSkinId,
-              );
-              const canUpgrade =
-                selectedSource && selectedTarget && !upgradeLoading;
+            {(actionMessage || actionError) && (
+              <div
+                className={`${styles.toastNotice} ${
+                  actionError ? styles.toastDanger : styles.toastSuccess
+                }`}
+              >
+                {actionMessage && <p>{actionMessage}</p>}
+                {actionError && <p>{actionError}</p>}
+              </div>
+            )}
 
-              return (
-                <section className={styles.card}>
-                  <div className={styles.sectionHeader}>
-                    <div>
-                      <p className={styles.eyebrow}>Upgrader</p>
-                      <h2>Risk a skin for a higher-priced one</h2>
-                    </div>
+            {/* My Skins / Shop tabs + Target */}
+            <div className={styles.gameGrid}>
+              <SkinContainer
+                headerLeft={
+                  <div className={styles.invTabs} role="tablist">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={inventoryTab === "mine"}
+                      className={
+                        inventoryTab === "mine"
+                          ? `${styles.invTab} ${styles.invTabActive}`
+                          : styles.invTab
+                      }
+                      onClick={() => setInventoryTab("mine")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M4 8h16v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+                        <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+                        <path d="M9 13h6" />
+                      </svg>
+                      <span>My Skins</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={inventoryTab === "shop"}
+                      className={
+                        inventoryTab === "shop"
+                          ? `${styles.invTab} ${styles.invTabActive}`
+                          : styles.invTab
+                      }
+                      onClick={() => setInventoryTab("shop")}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                      >
+                        <path d="M3 5h2.2l2.1 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L20.8 9H6.4" />
+                        <circle cx="10" cy="20" r="1.4" />
+                        <circle cx="17" cy="20" r="1.4" />
+                      </svg>
+                      <span>Shop</span>
+                    </button>
                   </div>
-
-                  <div className={styles.upgraderLayout}>
-                    <div className={styles.upgraderSubsection}>
-                      <h3>1. Choose a source skin</h3>
-                      {ownedItems.length === 0 ? (
-                        <p className={styles.upgraderEmpty}>
-                          You need an owned skin to upgrade.
-                        </p>
-                      ) : (
-                        <div className={styles.skinGrid}>
-                          {ownedItems.map((item) => {
-                            const isSelected =
-                              item.id === selectedUpgradeItemId;
-                            const cardClass = isSelected
-                              ? `${styles.skinCard} ${styles.upgraderCard} ${styles.upgraderCardSelected}`
-                              : `${styles.skinCard} ${styles.upgraderCard}`;
-
-                            return (
-                              <article
-                                className={cardClass}
-                                key={`upgrade-source-${item.id}`}
-                                onClick={() => selectUpgradeItem(item.id)}
-                              >
-                                <div className={styles.skinImageWrap}>
-                                  <SkinImage skin={item.skin} />
-                                </div>
-                                <div className={styles.skinCardBody}>
-                                  <h3>{item.skin.name}</h3>
-                                  <p className={styles.meta}>
-                                    Sell value{" "}
-                                    {formatMoney(item.sellPriceRub, "RUB")}
-                                  </p>
-                                </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      )}
+                }
+                count={
+                  inventoryTab === "mine"
+                    ? inventory.length
+                    : skinsPagination?.total
+                }
+                total={
+                  inventoryTab === "mine"
+                    ? formatMoney(inventoryTotalValue, "RUB")
+                    : skins.length > 0
+                      ? formatMoney(
+                          Math.min(
+                            ...skins.map((s) => Number(s.priceRub) || 0),
+                          ),
+                          "RUB",
+                        )
+                      : undefined
+                }
+                totalLabel={inventoryTab === "mine" ? "TOTAL" : "FROM"}
+                toolbar={
+                  inventoryTab === "mine" ? (
+                    <>
+                      <div
+                        className={`${styles.skinField} ${styles.skinFieldSearch}`}
+                      >
+                        <span className={styles.skinFieldLeading}>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          >
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                          </svg>
+                        </span>
+                        <input
+                          type="text"
+                          placeholder="Search skins…"
+                          value={inventorySearchInput}
+                          onChange={(e) => {
+                            setInventorySearchInput(e.target.value);
+                            setInventoryPage(1);
+                          }}
+                        />
+                      </div>
+                      <div className={styles.skinField}>
+                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          min="0"
+                          step="0.01"
+                          value={inventoryMinInput}
+                          onChange={(e) => {
+                            setInventoryMinInput(e.target.value);
+                            setInventoryPage(1);
+                          }}
+                        />
+                      </div>
+                      <div className={styles.skinField}>
+                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          min="0"
+                          step="0.01"
+                          value={inventoryMaxInput}
+                          onChange={(e) => {
+                            setInventoryMaxInput(e.target.value);
+                            setInventoryPage(1);
+                          }}
+                        />
+                      </div>
+                      <div
+                        className={`${styles.skinField} ${styles.skinFieldSelect}`}
+                      >
+                        <select
+                          value={inventorySort}
+                          onChange={(e) => {
+                            setInventorySort(e.target.value as InventorySort);
+                            setInventoryPage(1);
+                          }}
+                        >
+                          <option value="price-desc">Price ↓</option>
+                          <option value="price-asc">Price ↑</option>
+                          <option value="name">Name A–Z</option>
+                        </select>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div
+                        className={`${styles.skinField} ${styles.skinFieldSearch}`}
+                      >
+                        <span className={styles.skinFieldLeading}>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          >
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                          </svg>
+                        </span>
+                        <input
+                          type="search"
+                          placeholder="AK-47, Redline, Doppler"
+                          value={shopSearchInput}
+                          onChange={(e) => setShopSearchInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              applyShopFilter();
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className={styles.skinField}>
+                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <input
+                          type="number"
+                          placeholder="Min"
+                          min="0"
+                          step="0.01"
+                          value={shopMinInput}
+                          onChange={(e) => setShopMinInput(e.target.value)}
+                        />
+                      </div>
+                      <div className={styles.skinField}>
+                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <input
+                          type="number"
+                          placeholder="Max"
+                          min="0"
+                          step="0.01"
+                          value={shopMaxInput}
+                          onChange={(e) => setShopMaxInput(e.target.value)}
+                        />
+                      </div>
+                      <div className={styles.skinField}>
+                        <button
+                          type="button"
+                          className={`${styles.skinTileActionBtn} ${styles.skinTileActionPrimary}`}
+                          style={{ flex: 1, height: "100%" }}
+                          onClick={applyShopFilter}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </>
+                  )
+                }
+                footer={
+                  inventoryTab === "mine" ? (
+                    <SkinPager
+                      page={safeInventoryPage}
+                      totalPages={inventoryTotalPages}
+                      rangeFrom={inventoryRangeFrom}
+                      rangeTo={inventoryRangeTo}
+                      total={filteredInventory.length}
+                      onPrev={() =>
+                        setInventoryPage(Math.max(1, safeInventoryPage - 1))
+                      }
+                      onNext={() =>
+                        setInventoryPage(
+                          Math.min(inventoryTotalPages, safeInventoryPage + 1),
+                        )
+                      }
+                    />
+                  ) : (
+                    <SkinPager
+                      page={shopPage}
+                      totalPages={shopTotalPages}
+                      rangeFrom={shopRangeFrom}
+                      rangeTo={shopRangeTo}
+                      total={skinsPagination?.total ?? 0}
+                      onPrev={() => changeShopPage(Math.max(1, shopPage - 1))}
+                      onNext={() =>
+                        changeShopPage(Math.min(shopTotalPages, shopPage + 1))
+                      }
+                    />
+                  )
+                }
+              >
+                {inventoryTab === "mine" ? (
+                  !user ? (
+                    <p className={styles.skinContainerEmpty}>
+                      Log in with Steam to see your skins.
+                    </p>
+                  ) : inventoryLoading ? (
+                    <p className={styles.skinContainerLoading}>
+                      Loading inventory…
+                    </p>
+                  ) : inventoryError ? (
+                    <p className={styles.skinContainerError}>
+                      {inventoryError}
+                    </p>
+                  ) : inventory.length === 0 ? (
+                    <p className={styles.skinContainerEmpty}>
+                      No skins yet. Switch to the Shop tab to buy one.
+                    </p>
+                  ) : inventoryPageItems.length === 0 ? (
+                    <p className={styles.skinContainerEmpty}>
+                      No skins match the filters.
+                    </p>
+                  ) : (
+                    <div className={styles.skinTileGrid}>
+                      {inventoryPageItems.map((item) => {
+                        const isOwned = item.status === "owned";
+                        const isSelected = item.id === selectedUpgradeItemId;
+                        const statusLabel =
+                          item.status === "withdraw_pending"
+                            ? "Pending"
+                            : item.status === "owned"
+                              ? null
+                              : item.status;
+                        return (
+                          <SkinTile
+                            key={item.id}
+                            skin={item.skin}
+                            rarityKey={getSkinRarityKey(item.skin.rarity)}
+                            priceLabel={formatMoney(item.sellPriceRub, "RUB")}
+                            wearLabel={item.skin.exterior ?? null}
+                            statusLabel={statusLabel}
+                            selected={isSelected}
+                            disabled={!isOwned || sourceLocked}
+                            selectable={isOwned && !sourceLocked}
+                            onSelect={() => selectUpgradeItem(item.id)}
+                          />
+                        );
+                      })}
                     </div>
-
-                    <div className={styles.upgraderSubsection}>
-                      <h3>2. Choose a displayed chance</h3>
-                      <div className={styles.upgraderChanceRow}>
-                        {UPGRADER_CHANCE_TIERS.map((tier) => {
-                          const isActive = selectedUpgradeChance === tier;
+                  )
+                ) : (
+                  <>
+                    {shopFilterError && (
+                      <p className={styles.skinContainerError}>
+                        {shopFilterError}
+                      </p>
+                    )}
+                    {skinsLoading ? (
+                      <p className={styles.skinContainerLoading}>
+                        Loading skins…
+                      </p>
+                    ) : skinsError ? (
+                      <p className={styles.skinContainerError}>{skinsError}</p>
+                    ) : skins.length === 0 ? (
+                      <p className={styles.skinContainerEmpty}>
+                        {shopFilterActive
+                          ? "No skins match the selected filters."
+                          : "No skins available."}
+                      </p>
+                    ) : (
+                      <div className={styles.skinTileGrid}>
+                        {skins.map((skin) => {
+                          const balance = wallet
+                            ? Number(wallet.wallet.balance)
+                            : null;
+                          const price = Number(skin.priceRub);
+                          const isWalletLoading = Boolean(
+                            user && walletLoading,
+                          );
+                          const hasEnoughBalance =
+                            !user ||
+                            (balance !== null &&
+                              Number.isFinite(balance) &&
+                              Number.isFinite(price) &&
+                              balance >= price);
+                          const isBuying = buyingSkinId === skin.id;
+                          const buyLabel = !user
+                            ? "Log in to buy"
+                            : isBuying
+                              ? "Buying…"
+                              : isWalletLoading
+                                ? "Loading…"
+                                : hasEnoughBalance
+                                  ? `Buy ${formatMoney(skin.priceRub, "RUB")}`
+                                  : "Not enough balance";
                           return (
-                            <button
-                              type="button"
-                              key={`upgrade-chance-${tier}`}
-                              className={
-                                isActive
-                                  ? `${styles.upgraderChanceButton} ${styles.upgraderChanceButtonActive}`
-                                  : styles.upgraderChanceButton
+                            <SkinTile
+                              key={skin.id}
+                              skin={skin}
+                              rarityKey={getSkinRarityKey(skin.rarity)}
+                              priceLabel={formatMoney(skin.priceRub, "RUB")}
+                              wearLabel={skin.exterior ?? null}
+                              selectable={false}
+                              actions={
+                                <button
+                                  type="button"
+                                  className={`${styles.skinTileActionBtn} ${styles.skinTileActionPrimary}`}
+                                  disabled={
+                                    isBuying ||
+                                    isWalletLoading ||
+                                    !hasEnoughBalance
+                                  }
+                                  onClick={() => buySkin(skin.id)}
+                                >
+                                  {buyLabel}
+                                </button>
                               }
-                              disabled={selectedUpgradeItemId === null}
-                              onClick={() => selectUpgradeChance(tier)}
-                            >
-                              {tier}%
-                            </button>
+                            />
                           );
                         })}
                       </div>
-                    </div>
-
-                    <div className={styles.upgraderSubsection}>
-                      <h3>3. Choose a target skin</h3>
-                      {selectedUpgradeItemId === null ||
-                      selectedUpgradeChance === null ? (
-                        <p className={styles.upgraderEmpty}>
-                          Select a source skin and a chance tier to see target
-                          options.
-                        </p>
-                      ) : upgradeOptionsLoading ? (
-                        <p>Loading target options...</p>
-                      ) : upgradeOptionsError ? (
-                        <p className={styles.error}>{upgradeOptionsError}</p>
-                      ) : upgradeOptions.length === 0 ? (
-                        <p className={styles.upgraderEmpty}>
-                          No target skins available for this chance tier.
-                        </p>
-                      ) : (
-                        <div className={styles.skinGrid}>
-                          {upgradeOptions.map((skin) => {
-                            const isSelected =
-                              skin.id === selectedTargetSkinId;
-                            const cardClass = isSelected
-                              ? `${styles.skinCard} ${styles.upgraderCard} ${styles.upgraderCardSelected}`
-                              : `${styles.skinCard} ${styles.upgraderCard}`;
-
-                            return (
-                              <article
-                                className={cardClass}
-                                key={`upgrade-target-${skin.id}`}
-                                onClick={() => {
-                                  setUpgradeError(null);
-                                  setUpgradeResult(null);
-                                  setSelectedTargetSkinId((current) =>
-                                    current === skin.id ? null : skin.id,
-                                  );
-                                }}
-                              >
-                                <div className={styles.skinImageWrap}>
-                                  <SkinImage skin={skin} />
-                                </div>
-                                <div className={styles.skinCardBody}>
-                                  <h3>{skin.name}</h3>
-                                  <p className={styles.skinPrice}>
-                                    Upgrade value{" "}
-                                    {formatMoney(skin.receivedValueRub, "RUB")}
-                                  </p>
-                                  <p className={styles.meta}>
-                                    Market price{" "}
-                                    {formatMoney(skin.priceRub, "RUB")}
-                                  </p>
-                                </div>
-                              </article>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className={styles.upgraderSummary}>
-                      <div>
-                        <strong>Source</strong>
-                        {selectedSource
-                          ? selectedSource.skin.name
-                          : "No skin selected"}
-                      </div>
-                      <div>
-                        <strong>Source sell value</strong>
-                        {selectedSource
-                          ? formatMoney(selectedSource.sellPriceRub, "RUB")
-                          : "—"}
-                      </div>
-                      <div>
-                        <strong>Target</strong>
-                        {selectedTarget
-                          ? selectedTarget.name
-                          : "No target selected"}
-                      </div>
-                      <div>
-                        <strong>Received value</strong>
-                        {selectedTarget
-                          ? formatMoney(selectedTarget.receivedValueRub, "RUB")
-                          : "—"}
-                      </div>
-                      <div>
-                        <strong>Displayed chance</strong>
-                        {selectedUpgradeChance !== null
-                          ? `${selectedUpgradeChance}%`
-                          : "—"}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      className={styles.actionButton}
-                      disabled={!canUpgrade}
-                      onClick={performUpgrade}
-                    >
-                      {upgradeLoading ? "Upgrading..." : "Upgrade"}
-                    </button>
-
-                    {upgradeError && (
-                      <p className={styles.error}>{upgradeError}</p>
                     )}
-                    {upgradeMessage && (
-                      <p className={styles.actionMessage}>{upgradeMessage}</p>
-                    )}
-                    {upgradeResult && (
-                      <p
-                        className={
-                          upgradeResult.result === "win"
-                            ? `${styles.upgraderResult} ${styles.upgraderResultWin}`
-                            : `${styles.upgraderResult} ${styles.upgraderResultLoss}`
-                        }
-                      >
-                        {upgradeResult.result === "win"
-                          ? "Upgrade won"
-                          : "Upgrade lost"}
-                      </p>
-                    )}
+                  </>
+                )}
+              </SkinContainer>
 
+              <SkinContainer title="Target" count={upgradeOptions.length}>
+                {!user ? (
+                  <p className={styles.skinContainerEmpty}>
+                    Log in with Steam to see upgrade targets.
+                  </p>
+                ) : selectedUpgradeItemId === null ? (
+                  <p className={styles.skinContainerEmpty}>
+                    Select a skin from My Skins to see targets.
+                  </p>
+                ) : upgradeOptionsLoading ? (
+                  <p className={styles.skinContainerLoading}>
+                    Loading targets…
+                  </p>
+                ) : upgradeOptionsError ? (
+                  <p className={styles.skinContainerError}>
+                    {upgradeOptionsError}
+                  </p>
+                ) : upgradeOptions.length === 0 ? (
+                  <p className={styles.skinContainerEmpty}>
+                    No target skins for this chance tier.
+                  </p>
+                ) : (
+                  <div className={styles.skinTileGrid}>
+                    {upgradeOptions.map((skin) => {
+                      const isSelected = skin.id === selectedTargetSkinId;
+                      return (
+                        <SkinTile
+                          key={skin.id}
+                          skin={skin}
+                          rarityKey={getSkinRarityKey(skin.rarity)}
+                          priceLabel={formatMoney(skin.receivedValueRub, "RUB")}
+                          priceSubLabel={`Market ${formatMoney(skin.priceRub, "RUB")}`}
+                          wearLabel={skin.exterior ?? null}
+                          selected={isSelected}
+                          selectable={!targetSelectionLocked}
+                          disabled={targetSelectionLocked}
+                          onSelect={() => selectUpgradeTarget(skin.id)}
+                        />
+                      );
+                    })}
                   </div>
-                </section>
-              );
-            })()}
+                )}
+              </SkinContainer>
+            </div>
           </div>
         )}
-
-        {(actionMessage || actionError) && (
-          <div className={`${styles.card} ${styles.actionNotice}`}>
-            {actionMessage && (
-              <p className={styles.actionMessage}>{actionMessage}</p>
-            )}
-            {actionError && <p className={styles.error}>{actionError}</p>}
-          </div>
-        )}
-
-        <section className={`${styles.card} ${styles.catalogSection}`}>
-          <div className={styles.sectionHeader}>
-            <div>
-              <p className={styles.eyebrow}>Catalog</p>
-              <h2>Public skins</h2>
-            </div>
-            {skinsPagination && (
-              <p className={styles.meta}>{skinsPagination.total} items</p>
-            )}
-          </div>
-
-          <form
-            className={styles.catalogFilters}
-            onSubmit={(e) => { e.preventDefault(); applyFilter(); }}
-          >
-            <div className={`${styles.filterField} ${styles.filterFieldSearch}`}>
-              <label htmlFor="catalogSearch">Search skins</label>
-              <input
-                id="catalogSearch"
-                className={styles.filterInput}
-                type="search"
-                placeholder="AK-47, Redline, Doppler"
-                value={catalogSearchInput}
-                onChange={(e) => setCatalogSearchInput(e.target.value)}
-              />
-            </div>
-            <div className={styles.filterField}>
-              <label htmlFor="minPriceRub">Min price (RUB)</label>
-              <input
-                id="minPriceRub"
-                className={styles.filterInput}
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0"
-                value={minPriceRubInput}
-                onChange={(e) => setMinPriceRubInput(e.target.value)}
-              />
-            </div>
-            <div className={styles.filterField}>
-              <label htmlFor="maxPriceRub">Max price (RUB)</label>
-              <input
-                id="maxPriceRub"
-                className={styles.filterInput}
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Any"
-                value={maxPriceRubInput}
-                onChange={(e) => setMaxPriceRubInput(e.target.value)}
-              />
-            </div>
-            <div className={styles.filterActions}>
-              <button type="submit" className={styles.actionButton}>
-                Apply
-              </button>
-              <button
-                type="button"
-                className={`${styles.actionButton} ${styles.filterClearButton}`}
-                onClick={clearFilter}
-              >
-                Clear
-              </button>
-            </div>
-          </form>
-          {catalogFilterError && (
-            <p className={`${styles.error} ${styles.filterError}`}>{catalogFilterError}</p>
-          )}
-          {skinsLoading && <p>Loading skins catalog...</p>}
-          {skinsError && <p className={styles.error}>{skinsError}</p>}
-          {!skinsLoading && !skinsError && skins.length === 0 && (
-            <p className={styles.emptyState}>
-              {catalogFilterActive
-                ? "No skins match the selected filters."
-                : "No skins available."}
-            </p>
-          )}
-          {!skinsLoading && skins.length > 0 && (
-            <div className={styles.skinGrid}>
-              {skins.map((skin) => {
-                const balance = wallet ? Number(wallet.wallet.balance) : null;
-                const price = Number(skin.priceRub);
-                const isWalletLoading = Boolean(user && walletLoading);
-                const hasEnoughBalance =
-                  !user ||
-                  (balance !== null &&
-                    Number.isFinite(balance) &&
-                    Number.isFinite(price) &&
-                    balance >= price);
-                const isBuying = buyingSkinId === skin.id;
-
-                return (
-                  <article className={styles.skinCard} key={skin.id}>
-                    <div className={styles.skinImageWrap}>
-                      <SkinImage skin={skin} />
-                    </div>
-                    <div className={styles.skinCardBody}>
-                      <h3>{skin.name}</h3>
-                      <p className={styles.meta}>
-                        {[skin.weapon, skin.category]
-                          .filter(Boolean)
-                          .join(" / ") || skin.marketHashName}
-                      </p>
-                      <p className={styles.meta}>
-                        {[skin.rarity, skin.exterior]
-                          .filter(Boolean)
-                          .join(" / ") || "Standard"}
-                      </p>
-                      <p className={styles.skinPrice}>
-                        {formatMoney(skin.priceRub, "RUB")}
-                      </p>
-                      <button
-                        className={styles.actionButton}
-                        disabled={isBuying || isWalletLoading || !hasEnoughBalance}
-                        onClick={() => buySkin(skin.id)}
-                      >
-                        {isBuying
-                          ? "Buying..."
-                          : isWalletLoading
-                            ? "Loading..."
-                          : hasEnoughBalance
-                            ? `Buy for ${formatMoney(skin.priceRub, "RUB")}`
-                            : "Not enough balance"}
-                      </button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
       </main>
       <TopUpModal
         key={topUpKey}

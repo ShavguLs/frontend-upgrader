@@ -74,6 +74,16 @@ type InventoryItem = {
   skin: Skin;
 };
 
+type SellInventoryItemResponse = {
+  item: InventoryItem;
+  wallet: Wallet;
+};
+
+type WithdrawInventoryItemResponse = {
+  item: InventoryItem;
+  withdrawal: { id: number; status: string; provider: string };
+};
+
 type UpgradeHistoryItem = {
   id: number;
   result: "win" | "loss";
@@ -120,6 +130,28 @@ function formatMoney(value: string | number, currency: string) {
   }
 }
 
+function getSkinRarityKey(rarity?: string | null): string {
+  if (!rarity) return "milspec";
+  const v = rarity.toLowerCase();
+  if (v.includes("consumer")) return "consumer";
+  if (v.includes("industrial")) return "industrial";
+  if (v.includes("mil-spec") || v.includes("milspec")) return "milspec";
+  if (v.includes("restricted")) return "restricted";
+  if (v.includes("classified")) return "classified";
+  if (v.includes("covert")) return "covert";
+  if (v.includes("contraband")) return "contraband";
+  if (
+    v.includes("extraordinary") ||
+    v.includes("knife") ||
+    v.includes("gloves") ||
+    v.includes("special") ||
+    v.includes("★")
+  ) {
+    return "special";
+  }
+  return "milspec";
+}
+
 async function getResponseError(res: Response, fallback: string) {
   try {
     const data = (await res.json()) as { message?: string | string[] };
@@ -150,6 +182,45 @@ export default function ProfilePage() {
   const [upgradeHistoryError, setUpgradeHistoryError] = useState<string | null>(
     null,
   );
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [sellingItemId, setSellingItemId] = useState<number | null>(null);
+  const [withdrawingItemId, setWithdrawingItemId] = useState<number | null>(
+    null,
+  );
+  const [inventoryActionMessage, setInventoryActionMessage] = useState<
+    string | null
+  >(null);
+  const [inventoryActionError, setInventoryActionError] = useState<
+    string | null
+  >(null);
+
+  async function loadInventory() {
+    setInventoryLoading(true);
+    setInventoryError(null);
+    try {
+      const res = await fetch(`${API_BASE}/inventory`, {
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        setUser(null);
+        return;
+      }
+      if (!res.ok) {
+        setInventoryError(
+          await getResponseError(res, "Could not load inventory."),
+        );
+        return;
+      }
+      const data = (await res.json()) as InventoryItem[];
+      setInventory(data);
+    } catch {
+      setInventoryError("Could not load inventory.");
+    } finally {
+      setInventoryLoading(false);
+    }
+  }
 
   async function loadUpgradeHistory(page = 1) {
     setUpgradeHistoryLoading(true);
@@ -214,6 +285,7 @@ export default function ProfilePage() {
           setUser(data);
           setTradeUrlInput(data.steamTradeUrl ?? "");
           void loadWallet();
+          void loadInventory();
           void loadUpgradeHistory(1);
         } else {
           setError("Failed to check login status.");
@@ -262,6 +334,101 @@ export default function ProfilePage() {
         ? { wallet: current.wallet, deposits: [deposit, ...current.deposits] }
         : current,
     );
+  }
+
+  function updateWalletBalance(updatedWallet: Wallet) {
+    setWallet((current) =>
+      current
+        ? { wallet: updatedWallet, deposits: current.deposits }
+        : current,
+    );
+  }
+
+  async function sellInventoryItem(inventoryItemId: number) {
+    setInventoryActionError(null);
+    setInventoryActionMessage(null);
+    setSellingItemId(inventoryItemId);
+
+    try {
+      const res = await fetch(`${API_BASE}/inventory/sell`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryItemId }),
+      });
+
+      if (res.status === 401) {
+        setUser(null);
+        setInventoryActionError("Please log in with Steam to sell skins.");
+        return;
+      }
+
+      if (!res.ok) {
+        setInventoryActionError(
+          await getResponseError(res, "Could not sell skin."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as SellInventoryItemResponse;
+      setInventory((current) =>
+        current.filter((item) => item.id !== data.item.id),
+      );
+      if (wallet) {
+        updateWalletBalance(data.wallet);
+      }
+      setInventoryActionMessage(`${data.item.skin.name} sold successfully.`);
+    } catch {
+      setInventoryActionError("Could not reach the server.");
+    } finally {
+      setSellingItemId(null);
+    }
+  }
+
+  async function withdrawInventoryItem(inventoryItemId: number) {
+    setInventoryActionError(null);
+    setInventoryActionMessage(null);
+    setWithdrawingItemId(inventoryItemId);
+
+    try {
+      const res = await fetch(`${API_BASE}/inventory/withdraw`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inventoryItemId }),
+      });
+
+      if (res.status === 401) {
+        setUser(null);
+        setInventoryActionError(
+          "Please log in with Steam to withdraw skins.",
+        );
+        return;
+      }
+
+      if (!res.ok) {
+        setInventoryActionError(
+          await getResponseError(res, "Could not start withdrawal."),
+        );
+        return;
+      }
+
+      const data = (await res.json()) as WithdrawInventoryItemResponse;
+      setInventory((current) =>
+        current.map((item) =>
+          item.id === data.item.id
+            ? { ...item, status: data.item.status }
+            : item,
+        ),
+      );
+      setInventoryActionMessage(
+        "Withdrawal started. Accept the Steam trade offer before it expires.",
+      );
+    } catch {
+      setInventoryActionError("Could not reach the server.");
+    } finally {
+      setWithdrawingItemId(null);
+    }
   }
 
   async function saveTradeUrl(event: React.FormEvent<HTMLFormElement>) {
@@ -414,6 +581,146 @@ export default function ProfilePage() {
                   <p className={styles.error}>{tradeUrlError}</p>
                 )}
               </form>
+            </section>
+
+            <section className={styles.card}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.eyebrow}>Inventory</p>
+                  <h2>My skins</h2>
+                </div>
+                {!inventoryLoading && (
+                  <p className={styles.meta}>{inventory.length} items</p>
+                )}
+              </div>
+
+              {!user?.steamTradeUrl && (
+                <p className={styles.meta}>
+                  Save a Steam trade URL above to enable withdrawals.
+                </p>
+              )}
+
+              {inventoryActionMessage && (
+                <p className={styles.tradeUrlStatus}>
+                  {inventoryActionMessage}
+                </p>
+              )}
+              {inventoryActionError && (
+                <p className={styles.error}>{inventoryActionError}</p>
+              )}
+              {inventoryError && (
+                <p className={styles.error}>{inventoryError}</p>
+              )}
+
+              {inventoryLoading && inventory.length === 0 ? (
+                <p>Loading inventory...</p>
+              ) : !inventoryError && inventory.length === 0 ? (
+                <p className={styles.emptyState}>
+                  No skins yet. Buy one from the shop to get started.
+                </p>
+              ) : (
+                <div className={styles.skinTileGrid}>
+                  {inventory.map((item) => {
+                    const isOwned = item.status === "owned";
+                    const isSelling = sellingItemId === item.id;
+                    const isWithdrawing = withdrawingItemId === item.id;
+                    const statusLabel =
+                      item.status === "withdraw_pending"
+                        ? "Pending"
+                        : item.status === "owned"
+                          ? null
+                          : item.status;
+                    const tileClasses = [styles.skinTile];
+                    if (!isOwned) tileClasses.push(styles.skinTileDisabled);
+                    return (
+                      <article
+                        key={item.id}
+                        className={tileClasses.join(" ")}
+                        data-rarity={getSkinRarityKey(item.skin.rarity)}
+                      >
+                        <div className={styles.skinTileMain}>
+                          <span
+                            className={styles.skinTileBar}
+                            aria-hidden="true"
+                          />
+                          {item.skin.imageUrl ? (
+                            <div className={styles.skinTileImage}>
+                              <Image
+                                src={item.skin.imageUrl}
+                                alt={item.skin.name}
+                                fill
+                                sizes="(max-width: 540px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                                style={{ objectFit: "contain" }}
+                              />
+                            </div>
+                          ) : (
+                            <div className={styles.skinTileImagePlaceholder}>
+                              No image
+                            </div>
+                          )}
+                          {item.skin.exterior && (
+                            <span className={styles.skinTileWear}>
+                              {item.skin.exterior}
+                            </span>
+                          )}
+                          {statusLabel && (
+                            <span className={styles.skinTileStatus}>
+                              {statusLabel}
+                            </span>
+                          )}
+                          <div className={styles.skinTileInfo}>
+                            {item.skin.weapon && (
+                              <span className={styles.skinTileWeapon}>
+                                {item.skin.weapon}
+                              </span>
+                            )}
+                            <span className={styles.skinTileName}>
+                              {item.skin.name}
+                            </span>
+                            <span className={styles.skinTilePrice}>
+                              {formatMoney(item.sellPriceRub, "RUB")}
+                            </span>
+                          </div>
+                        </div>
+                        <div className={styles.skinTileActions}>
+                          <button
+                            type="button"
+                            className={styles.skinTileActionBtn}
+                            disabled={
+                              !isOwned || isSelling || isWithdrawing
+                            }
+                            onClick={() => sellInventoryItem(item.id)}
+                            title={`Sell for ${formatMoney(
+                              item.sellPriceRub,
+                              "RUB",
+                            )}`}
+                          >
+                            {isSelling ? "Selling..." : "Sell"}
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.skinTileActionBtn} ${styles.skinTileActionDanger}`}
+                            disabled={
+                              !isOwned ||
+                              isSelling ||
+                              isWithdrawing ||
+                              !user.steamTradeUrl
+                            }
+                            onClick={() => withdrawInventoryItem(item.id)}
+                            title={
+                              user.steamTradeUrl
+                                ? "Withdraw to Steam"
+                                : "Save a Steam trade URL to enable withdrawals"
+                            }
+                          >
+                            {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </section>
 
             <section className={styles.card}>
