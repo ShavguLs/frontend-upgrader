@@ -21,6 +21,7 @@ type NavbarProps = {
   apiBase: string;
   onLogout: () => void;
   onTopUp: () => void;
+  freeMode?: boolean;
 };
 
 function formatNavbarAmount(value: string | number): string {
@@ -78,6 +79,7 @@ export default function Navbar({
   apiBase,
   onLogout,
   onTopUp,
+  freeMode = false,
 }: NavbarProps) {
   const onlineCount = useDecorativeOnlineCount();
   const isLoggedIn = Boolean(user);
@@ -139,24 +141,31 @@ export default function Navbar({
               {wallet ? formatNavbarAmount(wallet.wallet.balance) : "—"}
             </span>
           </div>
-          <button
-            className={styles.topup}
-            type="button"
-            onClick={onTopUp}
-            aria-label="Top up balance"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.6"
-              strokeLinecap="round"
-              aria-hidden="true"
+          {!freeMode && (
+            <button
+              className={styles.topup}
+              type="button"
+              onClick={onTopUp}
+              aria-label="Top up balance"
             >
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            <span className={styles.topupLabel}>Top Up</span>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              <span className={styles.topupLabel}>Top Up</span>
+            </button>
+          )}
+          {freeMode && (
+            <span className={styles.freeModeBadge} title="Free mode">
+              Free mode
+            </span>
+          )}
         </div>
       )}
 

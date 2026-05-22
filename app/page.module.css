@@ -321,6 +321,18 @@
   font-size: 14px;
 }
 
+.freeModeBanner {
+  margin: 0 auto 12px;
+  max-width: 960px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 196, 0, 0.08);
+  border: 1px solid rgba(255, 196, 0, 0.35);
+  color: var(--fg-strong, #f3e9c8);
+  font-size: 13px;
+  text-align: center;
+}
+
 .catalogFilters {
   display: flex;
   flex-wrap: wrap;

@@ -119,10 +119,12 @@ const WHEEL_FINALIZE_MS = 3500;
 
 type UpgradeOptionSkin = Skin & {
   receivedValueRub: string | number;
+  displayedChancePercent: string | number;
 };
 
 type UpgradeOptionsResponse = {
   sourceValueRub: string | number;
+  requestedChancePercent?: string | number;
   displayedChancePercent: string | number;
   targetValueRub: string | number;
   items: UpgradeOptionSkin[];
@@ -227,6 +229,8 @@ function CoinIcon() {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
+const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === "true";
+
 function formatMoney(value: string | number, currency: string) {
   const amount = Number(value);
 
@@ -255,6 +259,12 @@ function formatMoneyAmount(value: string | number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function formatChancePercent(value: string | number) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) return null;
+  return amount.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
 }
 
 function MoneyLabel({ value }: { value: string | number }) {
@@ -755,6 +765,10 @@ export default function Home() {
   }
 
   function handleTopUp() {
+    if (FREE_MODE) {
+      showToast("Deposits are disabled in free mode.", "error");
+      return;
+    }
     if (!user) {
       window.location.assign(`${API_BASE}/auth/steam`);
       return;
@@ -1127,6 +1141,7 @@ export default function Home() {
   function selectUpgradeItem(itemId: number) {
     if (upgradeLoading) return;
     setSelectedTargetSkinId(null);
+    setWheelChancePercent(selectedUpgradeChance);
     setWheelState("idle");
     const next = selectedUpgradeItemId === itemId ? null : itemId;
     if (next === null) {
@@ -1152,13 +1167,19 @@ export default function Home() {
   function selectUpgradeTarget(skinId: number) {
     if (upgradeLoading) return;
     setWheelState("idle");
-    if (selectedTargetSkinId === skinId) {
+    const isDeselecting = selectedTargetSkinId === skinId;
+    if (isDeselecting) {
       playDeselectSound();
-    } else {
-      playSelectSound();
+      setSelectedTargetSkinId(null);
+      setWheelChancePercent(selectedUpgradeChance);
+      return;
     }
-    setSelectedTargetSkinId((current) =>
-      current === skinId ? null : skinId,
+    playSelectSound();
+    setSelectedTargetSkinId(skinId);
+    const target = upgradeOptions.find((s) => s.id === skinId);
+    const chance = target ? Number(target.displayedChancePercent) : NaN;
+    setWheelChancePercent(
+      Number.isFinite(chance) ? chance : selectedUpgradeChance,
     );
   }
 
@@ -1326,10 +1347,18 @@ export default function Home() {
   const chanceLocked = upgradeLoading;
   const targetSelectionLocked = upgradeLoading;
 
-  const multiplier =
-    selectedUpgradeChance && selectedUpgradeChance > 0
-      ? 100 / selectedUpgradeChance
-      : 0;
+  const multiplier = useMemo(() => {
+    if (selectedTarget) {
+      const chance = Number(selectedTarget.displayedChancePercent);
+      if (Number.isFinite(chance) && chance > 0) {
+        return 100 / chance;
+      }
+    }
+    if (selectedUpgradeChance && selectedUpgradeChance > 0) {
+      return 100 / selectedUpgradeChance;
+    }
+    return 0;
+  }, [selectedTarget, selectedUpgradeChance]);
 
   const upgradeReady =
     selectedSource && selectedTarget && !upgradeLoading;
@@ -1448,6 +1477,7 @@ export default function Home() {
         apiBase={API_BASE}
         onLogout={logout}
         onTopUp={handleTopUp}
+        freeMode={FREE_MODE}
       />
       <LiveDropsSidebar apiBase={API_BASE} />
       {toasts.length > 0 && (
@@ -1476,6 +1506,12 @@ export default function Home() {
         </div>
       )}
       <main className={styles.main}>
+        {FREE_MODE && (
+          <p className={styles.freeModeBanner}>
+            Free mode: every user gets 100,000 demo coins once. Deposits and
+            withdrawals are disabled.
+          </p>
+        )}
         {loading && <p>Checking login status...</p>}
         {error && <p className={styles.error}>{error}</p>}
         {!loading && !user && (
@@ -1517,7 +1553,8 @@ export default function Home() {
                   <div className={wheelClasses.join(" ")} style={wheelStyle} />
                   <div className={styles.upgraderReadout}>
                     <span className={readoutPctClasses.join(" ")}>
-                      {Math.round(wheelChancePercent)}
+                      {formatChancePercent(wheelChancePercent) ??
+                        selectedUpgradeChance}
                       <small>%</small>
                     </span>
                     <span className={styles.upgraderReadoutLbl}>
@@ -1970,12 +2007,19 @@ export default function Home() {
                   </p>
                 ) : upgradeOptions.length === 0 ? (
                   <p className={styles.skinContainerEmpty}>
-                    No target skins for this chance tier.
+                    No target skins available for this chance.
                   </p>
                 ) : (
                   <div className={styles.skinTileGrid}>
                     {targetPageItems.map((skin) => {
                       const isSelected = skin.id === selectedTargetSkinId;
+                      const chanceFormatted = formatChancePercent(
+                        skin.displayedChancePercent,
+                      );
+                      const chanceLabel =
+                        chanceFormatted !== null
+                          ? `${chanceFormatted}%`
+                          : undefined;
                       return (
                         <SkinTile
                           key={skin.id}
@@ -1986,6 +2030,7 @@ export default function Home() {
                               value={skin.receivedValueRub}
                             />
                           }
+                          priceSubLabel={chanceLabel}
                           wearLabel={formatWearLabel(skin.exterior)}
                           selected={isSelected}
                           selectable={!targetSelectionLocked}
@@ -2001,13 +2046,15 @@ export default function Home() {
           </div>
         )}
       </main>
-      <TopUpModal
-        key={topUpKey}
-        open={topUpOpen}
-        onClose={() => setTopUpOpen(false)}
-        apiBase={API_BASE}
-        onDepositCreated={handleDepositCreated}
-      />
+      {!FREE_MODE && (
+        <TopUpModal
+          key={topUpKey}
+          open={topUpOpen}
+          onClose={() => setTopUpOpen(false)}
+          apiBase={API_BASE}
+          onDepositCreated={handleDepositCreated}
+        />
+      )}
     </div>
   );
 }

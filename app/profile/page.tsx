@@ -113,6 +113,8 @@ const UPGRADE_HISTORY_PAGE_SIZE = 20;
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
+const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === "true";
+
 function formatDate(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -314,6 +316,11 @@ export default function ProfilePage() {
   }
 
   function handleTopUp() {
+    if (FREE_MODE) {
+      setInventoryActionError("Deposits are disabled in free mode.");
+      setInventoryActionMessage(null);
+      return;
+    }
     if (!user) {
       window.location.assign(`${API_BASE}/auth/steam`);
       return;
@@ -487,6 +494,7 @@ export default function ProfilePage() {
         apiBase={API_BASE}
         onLogout={logout}
         onTopUp={handleTopUp}
+        freeMode={FREE_MODE}
       />
       <main className={styles.main}>
         {loading && <p>Loading profile...</p>}
@@ -536,6 +544,7 @@ export default function ProfilePage() {
               </div>
             </section>
 
+            {!FREE_MODE && (
             <section className={styles.card}>
               <p className={styles.eyebrow}>Settings</p>
               <h2>Steam trade URL</h2>
@@ -576,6 +585,7 @@ export default function ProfilePage() {
                 )}
               </form>
             </section>
+            )}
 
             <section className={styles.card}>
               <div className={styles.sectionHeader}>
@@ -588,10 +598,16 @@ export default function ProfilePage() {
                 )}
               </div>
 
-              {!user?.steamTradeUrl && (
+              {FREE_MODE ? (
                 <p className={styles.meta}>
-                  Save a Steam trade URL above to enable withdrawals.
+                  Withdrawals are disabled in free mode.
                 </p>
+              ) : (
+                !user?.steamTradeUrl && (
+                  <p className={styles.meta}>
+                    Save a Steam trade URL above to enable withdrawals.
+                  </p>
+                )
               )}
 
               {inventoryActionMessage && (
@@ -698,24 +714,26 @@ export default function ProfilePage() {
                           >
                             {isSelling ? "Selling..." : "Sell"}
                           </button>
-                          <button
-                            type="button"
-                            className={`${styles.skinTileActionBtn} ${styles.skinTileActionDanger}`}
-                            disabled={
-                              !isOwned ||
-                              isSelling ||
-                              isWithdrawing ||
-                              !user.steamTradeUrl
-                            }
-                            onClick={() => withdrawInventoryItem(item.id)}
-                            title={
-                              user.steamTradeUrl
-                                ? "Withdraw to Steam"
-                                : "Save a Steam trade URL to enable withdrawals"
-                            }
-                          >
-                            {isWithdrawing ? "Withdrawing..." : "Withdraw"}
-                          </button>
+                          {!FREE_MODE && (
+                            <button
+                              type="button"
+                              className={`${styles.skinTileActionBtn} ${styles.skinTileActionDanger}`}
+                              disabled={
+                                !isOwned ||
+                                isSelling ||
+                                isWithdrawing ||
+                                !user.steamTradeUrl
+                              }
+                              onClick={() => withdrawInventoryItem(item.id)}
+                              title={
+                                user.steamTradeUrl
+                                  ? "Withdraw to Steam"
+                                  : "Save a Steam trade URL to enable withdrawals"
+                              }
+                            >
+                              {isWithdrawing ? "Withdrawing..." : "Withdraw"}
+                            </button>
+                          )}
                         </div>
                       </article>
                     );
@@ -724,43 +742,45 @@ export default function ProfilePage() {
               )}
             </section>
 
-            <section className={styles.card}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.eyebrow}>Wallet</p>
-                  <h2>Recent deposits</h2>
+            {!FREE_MODE && (
+              <section className={styles.card}>
+                <div className={styles.sectionHeader}>
+                  <div>
+                    <p className={styles.eyebrow}>Wallet</p>
+                    <h2>Recent deposits</h2>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.actionButton}
+                    onClick={handleTopUp}
+                  >
+                    Top up
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className={styles.actionButton}
-                  onClick={handleTopUp}
-                >
-                  Top up
-                </button>
-              </div>
 
-              {walletLoading && !wallet && <p>Loading deposits...</p>}
-              {wallet &&
-                (wallet.deposits.length > 0 ? (
-                  <ul className={styles.depositList}>
-                    {wallet.deposits.map((deposit) => (
-                      <li className={styles.depositItem} key={deposit.id}>
-                        <div>
-                          <strong>
-                            {formatMoney(deposit.amountRub, "RUB")}
-                          </strong>
-                          <p className={styles.meta}>
-                            {formatDate(deposit.createdAt)}
-                          </p>
-                        </div>
-                        <span className={styles.status}>{deposit.status}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className={styles.emptyState}>No recent deposits.</p>
-                ))}
-            </section>
+                {walletLoading && !wallet && <p>Loading deposits...</p>}
+                {wallet &&
+                  (wallet.deposits.length > 0 ? (
+                    <ul className={styles.depositList}>
+                      {wallet.deposits.map((deposit) => (
+                        <li className={styles.depositItem} key={deposit.id}>
+                          <div>
+                            <strong>
+                              {formatMoney(deposit.amountRub, "RUB")}
+                            </strong>
+                            <p className={styles.meta}>
+                              {formatDate(deposit.createdAt)}
+                            </p>
+                          </div>
+                          <span className={styles.status}>{deposit.status}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className={styles.emptyState}>No recent deposits.</p>
+                  ))}
+              </section>
+            )}
 
             <section className={styles.card}>
               <div className={styles.sectionHeader}>
@@ -853,13 +873,15 @@ export default function ProfilePage() {
           </div>
         )}
       </main>
-      <TopUpModal
-        key={topUpKey}
-        open={topUpOpen}
-        onClose={() => setTopUpOpen(false)}
-        apiBase={API_BASE}
-        onDepositCreated={handleDepositCreated}
-      />
+      {!FREE_MODE && (
+        <TopUpModal
+          key={topUpKey}
+          open={topUpOpen}
+          onClose={() => setTopUpOpen(false)}
+          apiBase={API_BASE}
+          onDepositCreated={handleDepositCreated}
+        />
+      )}
     </div>
   );
 }
