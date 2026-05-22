@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
 import TopUpModal from "../components/TopUpModal";
+import { getSkinRarityColor, getSkinRarityKey } from "../lib/rarity";
 import styles from "../page.module.css";
 
 type AuthUser = {
@@ -53,6 +54,7 @@ type Skin = {
   weapon?: string | null;
   category?: string | null;
   rarity?: string | null;
+  rarityColor?: string | null;
   exterior?: string | null;
   imageUrl?: string | null;
   priceRub: string | number;
@@ -142,28 +144,6 @@ function formatWearLabel(exterior?: string | null): string | null {
   if (normalized === "battle scarred") return "BS";
 
   return exterior;
-}
-
-function getSkinRarityKey(rarity?: string | null): string {
-  if (!rarity) return "milspec";
-  const v = rarity.toLowerCase();
-  if (v.includes("consumer")) return "consumer";
-  if (v.includes("industrial")) return "industrial";
-  if (v.includes("mil-spec") || v.includes("milspec")) return "milspec";
-  if (v.includes("restricted")) return "restricted";
-  if (v.includes("classified")) return "classified";
-  if (v.includes("covert")) return "covert";
-  if (v.includes("contraband")) return "contraband";
-  if (
-    v.includes("extraordinary") ||
-    v.includes("knife") ||
-    v.includes("gloves") ||
-    v.includes("special") ||
-    v.includes("★")
-  ) {
-    return "special";
-  }
-  return "milspec";
 }
 
 async function getResponseError(res: Response, fallback: string) {
@@ -646,11 +626,18 @@ export default function ProfilePage() {
                           : item.status;
                     const tileClasses = [styles.skinTile];
                     if (!isOwned) tileClasses.push(styles.skinTileDisabled);
+                    const rarityColor = getSkinRarityColor(
+                      item.skin.rarityColor,
+                    );
+                    const tileStyle = rarityColor
+                      ? ({ "--_rarity": rarityColor } as CSSProperties)
+                      : undefined;
                     return (
                       <article
                         key={item.id}
                         className={tileClasses.join(" ")}
                         data-rarity={getSkinRarityKey(item.skin.rarity)}
+                        style={tileStyle}
                       >
                         <div className={styles.skinTileMain}>
                           <span

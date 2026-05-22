@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import Image from "next/image";
+import { getSkinRarityColor, getSkinRarityKey } from "../lib/rarity";
 import styles from "./LiveDropsSidebar.module.css";
 
 type LiveDropSkin = {
@@ -11,6 +12,7 @@ type LiveDropSkin = {
   weapon?: string | null;
   category?: string | null;
   rarity?: string | null;
+  rarityColor?: string | null;
   exterior?: string | null;
   imageUrl?: string | null;
   priceRub: string | number;
@@ -36,28 +38,6 @@ type LiveDropsSidebarProps = {
 const DEFAULT_LIMIT = 16;
 const DEFAULT_POLL_MS = 12000;
 const TIME_UPDATE_MS = 30000;
-
-function getRarityKey(rarity?: string | null): string {
-  if (!rarity) return "milspec";
-  const v = rarity.toLowerCase();
-  if (v.includes("consumer")) return "consumer";
-  if (v.includes("industrial")) return "industrial";
-  if (v.includes("mil-spec") || v.includes("milspec")) return "milspec";
-  if (v.includes("restricted")) return "restricted";
-  if (v.includes("classified")) return "classified";
-  if (v.includes("covert")) return "covert";
-  if (v.includes("contraband")) return "contraband";
-  if (
-    v.includes("extraordinary") ||
-    v.includes("knife") ||
-    v.includes("gloves") ||
-    v.includes("special") ||
-    v.includes("★")
-  ) {
-    return "special";
-  }
-  return "milspec";
-}
 
 function formatMoneyAmount(value: string | number): string {
   const amount = Number(value);
@@ -176,12 +156,17 @@ export default function LiveDropsSidebar({
       ) : (
         <ul className={styles.list}>
           {drops.map((drop) => {
-            const rarityKey = getRarityKey(drop.skin.rarity);
+            const rarityKey = getSkinRarityKey(drop.skin.rarity);
+            const rarityColor = getSkinRarityColor(drop.skin.rarityColor);
+            const dropStyle = rarityColor
+              ? ({ "--_rarity": rarityColor } as CSSProperties)
+              : undefined;
             return (
               <li
                 key={drop.id}
                 className={styles.drop}
                 data-rarity={rarityKey}
+                style={dropStyle}
               >
                 <DropImage skin={drop.skin} />
                 <div className={styles.info}>
