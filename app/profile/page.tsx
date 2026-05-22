@@ -130,6 +130,20 @@ function formatMoney(value: string | number, currency: string) {
   }
 }
 
+function formatWearLabel(exterior?: string | null): string | null {
+  if (!exterior) return null;
+
+  const normalized = exterior.toLowerCase().replace(/[-_]+/g, " ").trim();
+
+  if (normalized === "factory new") return "FN";
+  if (normalized === "minimal wear") return "MW";
+  if (normalized === "field tested") return "FT";
+  if (normalized === "well worn") return "WW";
+  if (normalized === "battle scarred") return "BS";
+
+  return exterior;
+}
+
 function getSkinRarityKey(rarity?: string | null): string {
   if (!rarity) return "milspec";
   const v = rarity.toLowerCase();
@@ -658,9 +672,9 @@ export default function ProfilePage() {
                               No image
                             </div>
                           )}
-                          {item.skin.exterior && (
+                          {formatWearLabel(item.skin.exterior) && (
                             <span className={styles.skinTileWear}>
-                              {item.skin.exterior}
+                              {formatWearLabel(item.skin.exterior)}
                             </span>
                           )}
                           {statusLabel && (

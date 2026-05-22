@@ -282,6 +282,20 @@ async function getResponseError(res: Response, fallback: string) {
   return fallback;
 }
 
+function formatWearLabel(exterior?: string | null): string | null {
+  if (!exterior) return null;
+
+  const normalized = exterior.toLowerCase().replace(/[-_]+/g, " ").trim();
+
+  if (normalized === "factory new") return "FN";
+  if (normalized === "minimal wear") return "MW";
+  if (normalized === "field tested") return "FT";
+  if (normalized === "well worn") return "WW";
+  if (normalized === "battle scarred") return "BS";
+
+  return exterior;
+}
+
 function getSkinRarityKey(rarity?: string | null): string {
   if (!rarity) return "milspec";
   const v = rarity.toLowerCase();
@@ -1862,7 +1876,7 @@ export default function Home() {
                             priceLabel={
                               <MoneyLabel value={item.sellPriceRub} />
                             }
-                            wearLabel={item.skin.exterior ?? null}
+                            wearLabel={formatWearLabel(item.skin.exterior)}
                             statusLabel={statusLabel}
                             selected={isSelected}
                             disabled={!isOwned || sourceLocked}
@@ -1904,7 +1918,7 @@ export default function Home() {
                               priceLabel={
                                 <MoneyLabel value={skin.priceRub} />
                               }
-                              wearLabel={skin.exterior ?? null}
+                              wearLabel={formatWearLabel(skin.exterior)}
                               selected={isSelected}
                               selectable={!bulkBuying}
                               disabled={bulkBuying}
@@ -1975,7 +1989,7 @@ export default function Home() {
                               value={skin.receivedValueRub}
                             />
                           }
-                          wearLabel={skin.exterior ?? null}
+                          wearLabel={formatWearLabel(skin.exterior)}
                           selected={isSelected}
                           selectable={!targetSelectionLocked}
                           disabled={targetSelectionLocked}
