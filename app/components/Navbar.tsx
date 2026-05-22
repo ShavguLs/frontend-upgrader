@@ -36,15 +36,15 @@ function formatNavbarAmount(value: string | number): string {
 }
 
 function useDecorativeOnlineCount(): string {
-  const [count, setCount] = useState(12438);
+  const [count, setCount] = useState(26);
 
   useEffect(() => {
     const id = window.setInterval(() => {
       setCount((current) => {
-        const drift = Math.round((Math.random() - 0.5) * 18);
+        const drift = Math.round((Math.random() - 0.5) * 4);
         const next = current + drift;
-        if (next < 8000) return 8000;
-        if (next > 25000) return 25000;
+        if (next < 20) return 20;
+        if (next > 30) return 30;
         return next;
       });
     }, 3500);
