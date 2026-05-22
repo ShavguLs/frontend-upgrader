@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Roboto_Mono } from "next/font/google";
 import "./globals.css";
 
 const aldrich = localFont({
   src: "./fonts/Aldrich-Regular.ttf",
   variable: "--font-aldrich",
+  display: "swap",
+});
+
+const robotoMono = Roboto_Mono({
+  subsets: ["latin"],
+  variable: "--font-roboto-mono",
   display: "swap",
 });
 
@@ -19,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={aldrich.variable}>
+    <html lang="en" className={`${aldrich.variable} ${robotoMono.variable}`}>
       <body>{children}</body>
     </html>
   );

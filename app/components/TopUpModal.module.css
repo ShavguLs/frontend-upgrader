@@ -120,7 +120,7 @@
   border: 0;
   outline: none;
   color: var(--fg-1);
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 24px;
   letter-spacing: 0.02em;
   font-variant-numeric: tabular-nums;
@@ -285,7 +285,7 @@
   color: var(--fg-3);
 }
 .cryptoAmount {
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 16px;
   letter-spacing: 0.03em;
   color: var(--fg-1);

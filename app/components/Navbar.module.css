@@ -70,7 +70,7 @@
   height: 36px;
   padding: 0 var(--s-3);
   color: var(--fg-1);
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
@@ -125,8 +125,8 @@
 .balance {
   display: inline-flex;
   align-items: center;
-  gap: var(--s-2);
   padding: 0 var(--s-4);
+  font-family: var(--font-number);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
 }
@@ -136,21 +136,16 @@
   height: 22px;
   display: grid;
   place-items: center;
-  border-radius: 999px;
-  background: radial-gradient(circle at 32% 28%, #FFE38A 0%, var(--gold-400) 35%, var(--gold-600) 100%);
-  color: #6A4A00;
-  box-shadow:
-    inset 0 0 0 1px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 0 10px var(--gold-glow);
-  font-family: var(--font-display);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1;
+  color: var(--gold-400);
+}
+
+.coin svg {
+  width: 15px;
+  height: 15px;
 }
 
 .amount {
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 15px;
   letter-spacing: 0.03em;
   line-height: 1;

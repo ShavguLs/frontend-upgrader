@@ -92,6 +92,7 @@
 
 .balance {
   margin-top: 8px;
+  font-family: var(--font-number);
   font-size: 40px;
   font-weight: 700;
   letter-spacing: -0.04em;
@@ -196,6 +197,7 @@
 }
 
 .skinPrice {
+  font-family: var(--font-number);
   font-size: 18px;
   font-weight: 800;
 }
@@ -793,14 +795,20 @@
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
 }
 
-.upgraderHead h3 {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 14px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--fg-1);
-  line-height: 1;
+.upgraderTitleIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  color: var(--gold-400);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.upgraderTitleIcon svg {
+  width: 17px;
+  height: 17px;
 }
 
 .upgraderMultiplier {
@@ -927,7 +935,7 @@
 }
 
 .upgraderSlotPrice {
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 13px;
   color: var(--gold-500);
   font-variant-numeric: tabular-nums;
@@ -1012,7 +1020,7 @@
 }
 
 .upgraderReadoutPct {
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 36px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1073,7 +1081,7 @@
   padding: 0 var(--s-4);
   border-radius: var(--r-pill);
   color: var(--fg-3);
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-weight: 700;
   font-size: 12px;
   letter-spacing: 0.10em;
@@ -1271,7 +1279,7 @@
 }
 
 .skinContainerCount {
-  font-family: var(--font-mono);
+  font-family: var(--font-number);
   font-size: 11px;
   color: var(--fg-3);
   padding: 3px 8px;
@@ -1282,7 +1290,10 @@
 
 .skinContainerTotal {
   margin-left: auto;
-  font-family: var(--font-display);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-number);
   font-size: 13px;
   color: var(--gold-500);
   letter-spacing: 0.04em;
@@ -1291,8 +1302,18 @@
 
 .skinContainerTotal small {
   color: var(--fg-3);
-  margin-right: 4px;
   letter-spacing: 0.08em;
+}
+
+.skinContainerTotalIcon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--gold-400);
+}
+
+.skinContainerTotalIcon svg {
+  width: 14px;
+  height: 14px;
 }
 
 .skinToolbar {
@@ -1349,7 +1370,7 @@
   border: 0;
   outline: none;
   color: var(--fg-1);
-  font-family: var(--font-body);
+  font-family: var(--font-number);
   font-size: 12px;
   padding: 0 var(--s-3);
   height: 100%;
@@ -1372,9 +1393,14 @@
 
 .skinFieldPrefix {
   color: var(--fg-3);
-  font-family: var(--font-display);
+  display: grid;
+  place-items: center;
   padding-left: var(--s-3);
-  font-size: 12px;
+}
+
+.skinFieldPrefix svg {
+  width: 14px;
+  height: 14px;
 }
 
 .skinFieldSelect {
@@ -1408,6 +1434,19 @@
 .skinFieldSelect select option {
   background: var(--surface-2);
   color: var(--fg-1);
+}
+
+.moneyLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.moneyLabel svg {
+  width: 13px;
+  height: 13px;
+  color: var(--gold-400);
+  flex-shrink: 0;
 }
 
 .skinTileGrid {
@@ -1518,7 +1557,7 @@
 .skinPagerPage {
   min-width: 64px;
   text-align: center;
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 12px;
   letter-spacing: 0.12em;
   color: var(--fg-1);
@@ -1721,7 +1760,7 @@
 
 .skinTilePrice {
   margin-top: 4px;
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 13px;
   color: var(--gold-500);
   letter-spacing: 0.02em;
@@ -1731,7 +1770,7 @@
 }
 
 .skinTilePriceSub {
-  font-family: var(--font-display);
+  font-family: var(--font-number);
   font-size: 10px;
   color: var(--fg-3);
   letter-spacing: 0.04em;

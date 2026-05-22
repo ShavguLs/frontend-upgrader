@@ -23,21 +23,6 @@ type NavbarProps = {
   onTopUp: () => void;
 };
 
-function currencyGlyph(currency: string): string {
-  switch (currency.toUpperCase()) {
-    case "USD":
-      return "$";
-    case "EUR":
-      return "€";
-    case "RUB":
-      return "₽";
-    case "GBP":
-      return "£";
-    default:
-      return "$";
-  }
-}
-
 function formatNavbarAmount(value: string | number): string {
   const amount = Number(value);
   if (!Number.isFinite(amount)) {
@@ -66,6 +51,24 @@ function useDecorativeOnlineCount(): string {
   }, []);
 
   return count.toLocaleString();
+}
+
+function CoinIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <ellipse cx="12" cy="12" rx="4" ry="8.5" />
+      <path d="M5.2 9h13.6M5.2 15h13.6" />
+    </svg>
+  );
 }
 
 export default function Navbar({
@@ -124,7 +127,7 @@ export default function Navbar({
         <div className={styles.wallet}>
           <div className={styles.balance} title="Your balance">
             <span className={styles.coin} aria-hidden="true">
-              {wallet ? currencyGlyph(wallet.wallet.currency) : "$"}
+              <CoinIcon />
             </span>
             <span
               className={

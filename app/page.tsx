@@ -185,6 +185,42 @@ function ToastErrorIcon() {
   );
 }
 
+function UpgraderIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 19 19 5" />
+      <path d="M8 5h11v11" />
+      <path d="M6.5 13.5 4 16l4 4 2.5-2.5" />
+    </svg>
+  );
+}
+
+function CoinIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8.5" />
+      <ellipse cx="12" cy="12" rx="4" ry="8.5" />
+      <path d="M5.2 9h13.6M5.2 15h13.6" />
+    </svg>
+  );
+}
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -203,6 +239,28 @@ function formatMoney(value: string | number, currency: string) {
   } catch {
     return `${amount.toLocaleString()} ${currency}`;
   }
+}
+
+function formatMoneyAmount(value: string | number) {
+  const amount = Number(value);
+
+  if (!Number.isFinite(amount)) {
+    return String(value);
+  }
+
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function MoneyLabel({ value }: { value: string | number }) {
+  return (
+    <span className={styles.moneyLabel}>
+      <CoinIcon />
+      <span>{formatMoneyAmount(value)}</span>
+    </span>
+  );
 }
 
 async function getResponseError(res: Response, fallback: string) {
@@ -346,7 +404,7 @@ function UpgraderSlotImage({ skin }: { skin: Skin }) {
 type SkinTileProps = {
   skin: Skin;
   rarityKey: string;
-  priceLabel: string;
+  priceLabel: ReactNode;
   priceSubLabel?: string;
   wearLabel?: string | null;
   statusLabel?: string | null;
@@ -410,7 +468,7 @@ type SkinContainerProps = {
   title?: ReactNode;
   headerLeft?: ReactNode;
   count?: number;
-  total?: string;
+  total?: ReactNode;
   totalLabel?: string;
   toolbar?: ReactNode;
   children: ReactNode;
@@ -436,6 +494,9 @@ function SkinContainer({
         )}
         {total && (
           <span className={styles.skinContainerTotal}>
+            <span className={styles.skinContainerTotalIcon} aria-hidden="true">
+              <CoinIcon />
+            </span>
             {totalLabel && <small>{totalLabel}</small>}
             {total}
           </span>
@@ -526,7 +587,7 @@ function SkinPager({
 type UpgraderSlotProps = {
   side: "source" | "target";
   skin: Skin | null;
-  priceLabel?: string;
+  priceLabel?: ReactNode;
 };
 
 function UpgraderSlot({ side, skin, priceLabel }: UpgraderSlotProps) {
@@ -1418,9 +1479,11 @@ export default function Home() {
             {/* Upgrader panel */}
             <section className={styles.upgraderShell}>
               <header className={styles.upgraderHead}>
-                <h3>Upgrader</h3>
+                <span className={styles.upgraderTitleIcon} aria-label="Upgrader">
+                  <UpgraderIcon />
+                </span>
                 <span className={styles.upgraderMultiplier}>
-                  Multiplier{" "}
+                  {" "}
                   <b>{multiplier > 0 ? `${multiplier.toFixed(2)}×` : "0×"}</b>
                 </span>
               </header>
@@ -1431,7 +1494,7 @@ export default function Home() {
                   skin={selectedSource?.skin ?? null}
                   priceLabel={
                     selectedSource
-                      ? formatMoney(selectedSource.sellPriceRub, "RUB")
+                      ? <MoneyLabel value={selectedSource.sellPriceRub} />
                       : undefined
                   }
                 />
@@ -1455,7 +1518,11 @@ export default function Home() {
                   skin={selectedTarget ?? null}
                   priceLabel={
                     selectedTarget
-                      ? formatMoney(selectedTarget.receivedValueRub, "RUB")
+                      ? (
+                          <MoneyLabel
+                            value={selectedTarget.receivedValueRub}
+                          />
+                        )
                       : undefined
                   }
                 />
@@ -1542,19 +1609,7 @@ export default function Home() {
                       }
                       onClick={() => setInventoryTab("shop")}
                     >
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        aria-hidden="true"
-                      >
-                        <path d="M3 5h2.2l2.1 11.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.5L20.8 9H6.4" />
-                        <circle cx="10" cy="20" r="1.4" />
-                        <circle cx="17" cy="20" r="1.4" />
-                      </svg>
+                      <CoinIcon />
                       <span>Shop</span>
                     </button>
                   </div>
@@ -1566,13 +1621,12 @@ export default function Home() {
                 }
                 total={
                   inventoryTab === "mine"
-                    ? formatMoney(inventoryTotalValue, "RUB")
+                    ? formatMoneyAmount(inventoryTotalValue)
                     : skins.length > 0
-                      ? formatMoney(
+                      ? formatMoneyAmount(
                           Math.min(
                             ...skins.map((s) => Number(s.priceRub) || 0),
                           ),
-                          "RUB",
                         )
                       : undefined
                 }
@@ -1606,7 +1660,9 @@ export default function Home() {
                         />
                       </div>
                       <div className={styles.skinField}>
-                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <span className={styles.skinFieldPrefix} aria-hidden="true">
+                          <CoinIcon />
+                        </span>
                         <input
                           type="number"
                           placeholder="Min"
@@ -1620,7 +1676,9 @@ export default function Home() {
                         />
                       </div>
                       <div className={styles.skinField}>
-                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <span className={styles.skinFieldPrefix} aria-hidden="true">
+                          <CoinIcon />
+                        </span>
                         <input
                           type="number"
                           placeholder="Max"
@@ -1680,7 +1738,9 @@ export default function Home() {
                         />
                       </div>
                       <div className={styles.skinField}>
-                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <span className={styles.skinFieldPrefix} aria-hidden="true">
+                          <CoinIcon />
+                        </span>
                         <input
                           type="number"
                           placeholder="Min"
@@ -1691,7 +1751,9 @@ export default function Home() {
                         />
                       </div>
                       <div className={styles.skinField}>
-                        <span className={styles.skinFieldPrefix}>₽</span>
+                        <span className={styles.skinFieldPrefix} aria-hidden="true">
+                          <CoinIcon />
+                        </span>
                         <input
                           type="number"
                           placeholder="Max"
@@ -1795,7 +1857,9 @@ export default function Home() {
                             key={item.id}
                             skin={item.skin}
                             rarityKey={getSkinRarityKey(item.skin.rarity)}
-                            priceLabel={formatMoney(item.sellPriceRub, "RUB")}
+                            priceLabel={
+                              <MoneyLabel value={item.sellPriceRub} />
+                            }
                             wearLabel={item.skin.exterior ?? null}
                             statusLabel={statusLabel}
                             selected={isSelected}
@@ -1835,7 +1899,9 @@ export default function Home() {
                               key={skin.id}
                               skin={skin}
                               rarityKey={getSkinRarityKey(skin.rarity)}
-                              priceLabel={formatMoney(skin.priceRub, "RUB")}
+                              priceLabel={
+                                <MoneyLabel value={skin.priceRub} />
+                              }
                               wearLabel={skin.exterior ?? null}
                               selected={isSelected}
                               selectable={!bulkBuying}
@@ -1902,7 +1968,11 @@ export default function Home() {
                           key={skin.id}
                           skin={skin}
                           rarityKey={getSkinRarityKey(skin.rarity)}
-                          priceLabel={formatMoney(skin.receivedValueRub, "RUB")}
+                          priceLabel={
+                            <MoneyLabel
+                              value={skin.receivedValueRub}
+                            />
+                          }
                           wearLabel={skin.exterior ?? null}
                           selected={isSelected}
                           selectable={!targetSelectionLocked}
