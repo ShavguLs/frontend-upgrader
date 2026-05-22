@@ -231,6 +231,9 @@ const API_BASE =
 
 const FREE_MODE = process.env.NEXT_PUBLIC_FREE_MODE === "true";
 
+const FREE_MODE_AGENT_IMAGE_URL =
+  "https://steamcommunity-a.akamaihd.net/economy/image/i0CoZ81Ui0m-9KwlBY1L_18myuGuq1wfhWSaZgMttyVfPaERSR0Wqmu7LAocGIa-2lmxU-LR0dnuNm6E8Vl45Iv181z1fgn8oYby8iRe_OGnZ6psLM-FD3WZj7wuseM-GnG2lh4h5m2EmderdX7DaA9zW8N2QuBbtBG-mty2N-i0tADAy9USaSI87As/512fx384f";
+
 function formatMoney(value: string | number, currency: string) {
   const amount = Number(value);
 
@@ -737,6 +740,25 @@ export default function Home() {
   const upgradeOptionsRequestId = useRef(0);
   const [topUpOpen, setTopUpOpen] = useState(false);
   const [topUpKey, setTopUpKey] = useState(0);
+  const [freeModeModalOpen, setFreeModeModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (!FREE_MODE) return;
+    let shouldOpen = true;
+    try {
+      if (window.localStorage.getItem("freeModeModalSeen") === "1") {
+        shouldOpen = false;
+      } else {
+        window.localStorage.setItem("freeModeModalSeen", "1");
+      }
+    } catch {
+      // localStorage unavailable — still show the modal
+    }
+    if (shouldOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFreeModeModalOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -1506,12 +1528,6 @@ export default function Home() {
         </div>
       )}
       <main className={styles.main}>
-        {FREE_MODE && (
-          <p className={styles.freeModeBanner}>
-            Free mode: every user gets 100,000 demo coins once. Deposits and
-            withdrawals are disabled.
-          </p>
-        )}
         {loading && <p>Checking login status...</p>}
         {error && <p className={styles.error}>{error}</p>}
         {!loading && !user && (
@@ -2054,6 +2070,55 @@ export default function Home() {
           apiBase={API_BASE}
           onDepositCreated={handleDepositCreated}
         />
+      )}
+      {FREE_MODE && freeModeModalOpen && (
+        <div
+          className={styles.freeModeOverlay}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setFreeModeModalOpen(false);
+            }
+          }}
+        >
+          <section
+            className={styles.freeModeModal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="free-mode-title"
+          >
+            <button
+              type="button"
+              className={styles.freeModeClose}
+              aria-label="Close"
+              onClick={() => setFreeModeModalOpen(false)}
+            >
+              <span aria-hidden="true">×</span>
+            </button>
+            <div className={styles.freeModeAgent}>
+              <Image
+                src={FREE_MODE_AGENT_IMAGE_URL}
+                alt="Free mode agent"
+                width={256}
+                height={192}
+                priority
+              />
+            </div>
+            <h2 id="free-mode-title" className={styles.freeModeTitle}>
+              FREE MODE
+            </h2>
+            <p className={styles.freeModeText}>
+              100,000 demo coins included. Deposits and withdrawals are
+              disabled.
+            </p>
+            <button
+              type="button"
+              className={styles.freeModeCta}
+              onClick={() => setFreeModeModalOpen(false)}
+            >
+              Play free
+            </button>
+          </section>
+        </div>
       )}
     </div>
   );
