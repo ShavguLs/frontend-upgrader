@@ -10,6 +10,7 @@ import {
 } from "react";
 import Image from "next/image";
 import styles from "./page.module.css";
+import LiveDropsSidebar from "./components/LiveDropsSidebar";
 import Navbar from "./components/Navbar";
 import TopUpModal from "./components/TopUpModal";
 import {
@@ -1437,6 +1438,7 @@ export default function Home() {
         onLogout={logout}
         onTopUp={handleTopUp}
       />
+      <LiveDropsSidebar apiBase={API_BASE} />
       {toasts.length > 0 && (
         <div
           className={styles.toastZone}

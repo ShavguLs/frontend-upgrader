@@ -1,0 +1,165 @@
+.sidebar {
+  position: fixed;
+  top: var(--topbar-h);
+  left: 0;
+  bottom: 0;
+  width: var(--drops-w, 280px);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, rgba(21, 25, 31, 0.85), rgba(15, 18, 22, 0.85));
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-right: 1px solid var(--border-default);
+  box-shadow: 12px 0 32px rgba(0, 0, 0, 0.3);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: var(--s-2);
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.empty {
+  padding: var(--s-5);
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  text-align: center;
+}
+
+.drop {
+  --_rarity: var(--rarity-milspec);
+  --_glow: var(--rarity-milspec-glow);
+  position: relative;
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: var(--s-3);
+  align-items: center;
+  padding: 10px;
+  border-radius: var(--r-sm);
+  background:
+    radial-gradient(70% 60% at 0% 50%,
+      color-mix(in oklab, var(--_rarity) 22%, transparent),
+      transparent 70%),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-default);
+  animation: liveDropsDropIn 380ms var(--ease-snap);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drop {
+    animation: none;
+  }
+}
+
+.drop::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--_rarity);
+  box-shadow: 0 0 10px var(--_glow);
+  border-radius: 2px;
+}
+
+.dropImage {
+  position: relative;
+  width: 56px;
+  height: 44px;
+  background: radial-gradient(60% 50% at 50% 55%,
+    color-mix(in oklab, var(--_rarity) 28%, transparent),
+    transparent 70%);
+  border-radius: var(--r-xs);
+  overflow: hidden;
+}
+
+.dropImage img {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
+}
+
+.dropImagePlaceholder {
+  width: 56px;
+  height: 44px;
+  background: radial-gradient(60% 50% at 50% 55%,
+    color-mix(in oklab, var(--_rarity) 28%, transparent),
+    transparent 70%);
+  border-radius: var(--r-xs);
+}
+
+.info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--fg-1);
+  letter-spacing: 0.01em;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 2px;
+  gap: var(--s-2);
+}
+
+.price {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-number);
+  font-size: 12px;
+  color: var(--gold-500);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.priceIcon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--gold-400);
+}
+
+.priceIcon svg {
+  width: 11px;
+  height: 11px;
+}
+
+.time {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--fg-4);
+  white-space: nowrap;
+}
+
+@keyframes liveDropsDropIn {
+  0%   { opacity: 0; transform: translateY(-12px) scaleY(0.85); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@media (max-width: 1100px) {
+  .sidebar {
+    display: none;
+  }
+}
