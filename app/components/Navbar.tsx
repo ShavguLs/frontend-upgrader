@@ -123,6 +123,29 @@ export default function Navbar({
         <span className={styles.onlineCount}>{onlineCount}</span>
       </div>
 
+      <nav className={styles.repoLinks} aria-label="Source code">
+        <a
+          className={styles.repoLink}
+          href="https://github.com/ShavguLs/frontend-upgrader"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Frontend repository"
+        >
+          <GitHubIcon />
+          <span className={styles.repoLinkLabel}>Frontend</span>
+        </a>
+        <a
+          className={styles.repoLink}
+          href="https://github.com/ShavguLs/backend-upgrader"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Backend repository"
+        >
+          <GitHubIcon />
+          <span className={styles.repoLinkLabel}>Backend</span>
+        </a>
+      </nav>
+
       <div className={styles.spacer} />
 
       {isLoggedIn && (
@@ -254,6 +277,14 @@ function ProfileIcon() {
     >
       <circle cx="12" cy="8" r="4" />
       <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" />
+    </svg>
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48 0-.24-.01-.87-.01-1.7-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.99 1.03-2.69-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.56 9.56 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.6 1.03 2.69 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .26.18.58.69.48A10 10 0 0 0 12 2Z" />
     </svg>
   );
 }

@@ -1091,6 +1091,7 @@ export default function Home() {
           ? `${data.items[0].skin.name} added to your inventory.`
           : `${count} skins added to your inventory.`,
       );
+      setInventoryTab("mine");
     } catch {
       showToast("Could not reach the server.", "error");
     } finally {
@@ -1892,9 +1893,56 @@ export default function Home() {
                       {inventoryError}
                     </p>
                   ) : ownedInventory.length === 0 ? (
-                    <p className={styles.skinContainerEmpty}>
-                      No available skins. Switch to the Shop tab to buy one.
-                    </p>
+                    <div className={styles.emptyInventoryWrap}>
+                      <div
+                        className={styles.emptyInventoryBlurred}
+                        aria-hidden="true"
+                      >
+                        <div className={styles.skinTileGrid}>
+                          {(skins.length > 0
+                            ? skins.slice(0, 8)
+                            : Array.from({ length: 8 })
+                          ).map((skin, index) =>
+                            skin ? (
+                              <SkinTile
+                                key={`empty-bg-${(skin as Skin).id}`}
+                                skin={skin as Skin}
+                                rarityKey={getSkinRarityKey(
+                                  (skin as Skin).rarity,
+                                )}
+                                priceLabel={
+                                  <MoneyLabel
+                                    value={(skin as Skin).priceRub}
+                                  />
+                                }
+                                wearLabel={formatWearLabel(
+                                  (skin as Skin).exterior,
+                                )}
+                                selectable={false}
+                                disabled
+                              />
+                            ) : (
+                              <div
+                                key={`empty-bg-placeholder-${index}`}
+                                className={styles.emptyInventoryPlaceholder}
+                              />
+                            ),
+                          )}
+                        </div>
+                      </div>
+                      <div className={styles.emptyInventoryOverlay}>
+                        <p className={styles.emptyInventoryTitle}>
+                          No skins yet
+                        </p>
+                        <button
+                          type="button"
+                          className={styles.emptyInventoryButton}
+                          onClick={() => setInventoryTab("shop")}
+                        >
+                          Go to Shop
+                        </button>
+                      </div>
+                    </div>
                   ) : inventoryPageItems.length === 0 ? (
                     <p className={styles.skinContainerEmpty}>
                       No skins match the filters.
