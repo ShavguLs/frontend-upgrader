@@ -2209,3 +2209,39 @@
     max-width: 100%;
   }
 }
+
+.topDropContent {
+  display: flex;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.topDropPreview {
+  flex: 0 0 200px;
+  max-width: 200px;
+}
+
+.topDropStats {
+  display: grid;
+  gap: 8px;
+  align-content: center;
+}
+
+.topDropStatValue {
+  font-family: var(--font-number);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--gold-500, #d6a93e);
+}
+
+@media (max-width: 640px) {
+  .topDropContent {
+    flex-direction: column;
+  }
+
+  .topDropPreview {
+    flex: 0 0 auto;
+    max-width: 240px;
+  }
+}

@@ -86,6 +86,23 @@ type WithdrawInventoryItemResponse = {
   withdrawal: { id: number; status: string; provider: string };
 };
 
+type TopDropWonItem = {
+  id: number;
+  status: string;
+  skin: Skin;
+};
+
+type TopDrop = {
+  id: number;
+  createdAt: string;
+  priceRub: string | number;
+  wonItem: TopDropWonItem;
+};
+
+type TopDropResponse = {
+  topDrop: TopDrop | null;
+};
+
 type UpgradeHistoryItem = {
   id: number;
   result: "win" | "loss";
@@ -191,6 +208,35 @@ export default function ProfilePage() {
   const [inventoryActionError, setInventoryActionError] = useState<
     string | null
   >(null);
+  const [topDrop, setTopDrop] = useState<TopDrop | null>(null);
+  const [topDropLoading, setTopDropLoading] = useState(false);
+  const [topDropError, setTopDropError] = useState<string | null>(null);
+
+  async function loadTopDrop() {
+    setTopDropLoading(true);
+    setTopDropError(null);
+    try {
+      const res = await fetch(`${API_BASE}/upgrader/top-drop`, {
+        credentials: "include",
+      });
+      if (res.status === 401) {
+        setUser(null);
+        return;
+      }
+      if (!res.ok) {
+        setTopDropError(
+          await getResponseError(res, "Could not load top drop."),
+        );
+        return;
+      }
+      const data = (await res.json()) as TopDropResponse;
+      setTopDrop(data.topDrop);
+    } catch {
+      setTopDropError("Could not load top drop.");
+    } finally {
+      setTopDropLoading(false);
+    }
+  }
 
   async function loadInventory() {
     setInventoryLoading(true);
@@ -283,6 +329,7 @@ export default function ProfilePage() {
           void loadWallet();
           void loadInventory();
           void loadUpgradeHistory(1);
+          void loadTopDrop();
         } else {
           setError("Failed to check login status.");
         }
@@ -375,6 +422,14 @@ export default function ProfilePage() {
       setInventory((current) =>
         current.filter((item) => item.id !== data.item.id),
       );
+      setTopDrop((current) =>
+        current && current.wonItem.id === data.item.id
+          ? {
+              ...current,
+              wonItem: { ...current.wonItem, status: data.item.status },
+            }
+          : current,
+      );
       if (wallet) {
         updateWalletBalance(data.wallet);
       }
@@ -421,6 +476,14 @@ export default function ProfilePage() {
             ? { ...item, status: data.item.status }
             : item,
         ),
+      );
+      setTopDrop((current) =>
+        current && current.wonItem.id === data.item.id
+          ? {
+              ...current,
+              wonItem: { ...current.wonItem, status: data.item.status },
+            }
+          : current,
       );
       setInventoryActionMessage(
         "Withdrawal started. Accept the Steam trade offer before it expires.",
@@ -542,6 +605,113 @@ export default function ProfilePage() {
                   )}
                 </div>
               </div>
+            </section>
+
+            <section className={styles.card}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <p className={styles.eyebrow}>Achievement</p>
+                  <h2>Top drop</h2>
+                </div>
+                {topDrop && (
+                  <p className={styles.meta}>{formatDate(topDrop.createdAt)}</p>
+                )}
+              </div>
+
+              {topDropError && (
+                <p className={styles.error}>{topDropError}</p>
+              )}
+              {topDropLoading && !topDrop && !topDropError && (
+                <p>Loading top drop...</p>
+              )}
+              {!topDropLoading && !topDropError && !topDrop && (
+                <p className={styles.emptyState}>
+                  No upgrader wins yet. Win an upgrader attempt to set your top
+                  drop.
+                </p>
+              )}
+              {topDrop && (() => {
+                const skin = topDrop.wonItem.skin;
+                const rarityColor = getSkinRarityColor(skin.rarityColor);
+                const tileStyle = rarityColor
+                  ? ({ "--_rarity": rarityColor } as CSSProperties)
+                  : undefined;
+                const wearLabel = formatWearLabel(skin.exterior);
+                const statusLabel =
+                  topDrop.wonItem.status === "owned"
+                    ? null
+                    : topDrop.wonItem.status === "withdraw_pending"
+                      ? "Pending"
+                      : topDrop.wonItem.status;
+                return (
+                  <div className={styles.topDropContent}>
+                    <div className={styles.topDropPreview}>
+                      <article
+                        className={styles.skinTile}
+                        data-rarity={getSkinRarityKey(skin.rarity)}
+                        style={tileStyle}
+                      >
+                        <div className={styles.skinTileMain}>
+                          <span
+                            className={styles.skinTileBar}
+                            aria-hidden="true"
+                          />
+                          {skin.imageUrl ? (
+                            <div className={styles.skinTileImage}>
+                              <Image
+                                src={skin.imageUrl}
+                                alt={skin.name}
+                                fill
+                                sizes="200px"
+                                style={{ objectFit: "contain" }}
+                              />
+                            </div>
+                          ) : (
+                            <div className={styles.skinTileImagePlaceholder}>
+                              No image
+                            </div>
+                          )}
+                          {wearLabel && (
+                            <span className={styles.skinTileWear}>
+                              {wearLabel}
+                            </span>
+                          )}
+                          {statusLabel && (
+                            <span className={styles.skinTileStatus}>
+                              {statusLabel}
+                            </span>
+                          )}
+                          <div className={styles.skinTileInfo}>
+                            {skin.weapon && (
+                              <span className={styles.skinTileWeapon}>
+                                {skin.weapon}
+                              </span>
+                            )}
+                            <span className={styles.skinTileName}>
+                              {skin.name}
+                            </span>
+                          </div>
+                        </div>
+                      </article>
+                    </div>
+                    <div className={styles.topDropStats}>
+                      <p className={styles.eyebrow}>Value at win</p>
+                      <p className={styles.topDropStatValue}>
+                        {formatMoney(topDrop.priceRub, "RUB")}
+                      </p>
+                      <p className={styles.meta}>
+                        Won {formatDate(topDrop.createdAt)}
+                      </p>
+                      <p className={styles.meta}>
+                        Current status:{" "}
+                        <span className={styles.status}>
+                          {topDrop.wonItem.status}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
             </section>
 
             {!FREE_MODE && (
