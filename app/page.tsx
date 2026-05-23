@@ -1530,14 +1530,6 @@ export default function Home() {
       <main className={styles.main}>
         {loading && <p>Checking login status...</p>}
         {error && <p className={styles.error}>{error}</p>}
-        {!loading && !user && (
-          <div className={styles.authSection}>
-            <h1>CS2 Gambler</h1>
-            <p className={styles.eyebrow}>
-              Log in with Steam from the top navbar to get started.
-            </p>
-          </div>
-        )}
 
         {!loading && (
           <div className={styles.gamePage}>
