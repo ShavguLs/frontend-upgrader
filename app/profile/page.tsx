@@ -127,6 +127,8 @@ type UpgradeHistoryResponse = {
 
 const UPGRADE_HISTORY_PAGE_SIZE = 20;
 
+type ProfileActivityTab = "inventory" | "history";
+
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3000";
 
@@ -149,6 +151,23 @@ function formatMoney(value: string | number, currency: string) {
   } catch {
     return `${amount.toLocaleString()} ${currency}`;
   }
+}
+
+function formatSkinDisplayName(skin: {
+  weapon?: string | null;
+  name: string;
+}): string {
+  const name = skin.name;
+  const weapon = skin.weapon;
+  if (!weapon) return name;
+  const trimmedName = name.trim();
+  const trimmedWeapon = weapon.trim();
+  if (
+    trimmedName.toLowerCase().startsWith(trimmedWeapon.toLowerCase())
+  ) {
+    return trimmedName;
+  }
+  return `${trimmedWeapon} | ${trimmedName}`;
 }
 
 function formatWearLabel(exterior?: string | null): string | null {
@@ -211,6 +230,9 @@ export default function ProfilePage() {
   const [topDrop, setTopDrop] = useState<TopDrop | null>(null);
   const [topDropLoading, setTopDropLoading] = useState(false);
   const [topDropError, setTopDropError] = useState<string | null>(null);
+  const [activityTab, setActivityTab] = useState<ProfileActivityTab>(
+    "inventory",
+  );
 
   async function loadTopDrop() {
     setTopDropLoading(true);
@@ -576,146 +598,142 @@ export default function ProfilePage() {
         )}
 
         {!loading && user && (
-          <div className={styles.dashboard}>
-            <section className={styles.card}>
-              <div className={styles.accountRow}>
-                {user.avatar && (
-                  <Image
-                    className={styles.avatar}
-                    src={user.avatar}
-                    alt={user.displayName}
-                    width={64}
-                    height={64}
-                  />
+          <div className={`${styles.dashboard} ${styles.profileDashboard}`}>
+            <div className={styles.profileHero}>
+              <section
+                className={`${styles.profileCard} ${styles.profileAccount}`}
+              >
+                <div className={styles.profileAccountRow}>
+                  {user.avatar && (
+                    <Image
+                      className={styles.profileAccountAvatar}
+                      src={user.avatar}
+                      alt={user.displayName}
+                      width={72}
+                      height={72}
+                    />
+                  )}
+                  <div className={styles.profileAccountInfo}>
+                    <p className={styles.eyebrow}>Steam account</p>
+                    <h2 className={styles.profileAccountName}>
+                      {user.displayName}
+                    </h2>
+                    <p className={styles.profileAccountId}>
+                      ID {user.steamId}
+                    </p>
+                  </div>
+                </div>
+                {user.profileUrl && (
+                  <a
+                    href={user.profileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.profileAccountLink}
+                  >
+                    Open Steam profile
+                  </a>
                 )}
-                <div>
-                  <p className={styles.eyebrow}>Steam account</p>
-                  <h2>{user.displayName}</h2>
-                  <p className={styles.meta}>Steam ID: {user.steamId}</p>
-                  {user.profileUrl && (
-                    <p className={styles.meta}>
-                      <a
-                        href={user.profileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open Steam profile
-                      </a>
+              </section>
+
+              <section
+                className={`${styles.profileCard} ${styles.profileTopDrop}`}
+              >
+                <div className={styles.profileTopDropHeader}>
+                  <div>
+                    <p className={styles.profileTopDropEyebrowGold}>
+                      Best Win
+                    </p>
+                    <h2>Top drop</h2>
+                  </div>
+                  {topDrop && (
+                    <p className={styles.profileTopDropDate}>
+                      {formatDate(topDrop.createdAt)}
                     </p>
                   )}
                 </div>
-              </div>
-            </section>
 
-            <section className={styles.card}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.eyebrow}>Achievement</p>
-                  <h2>Top drop</h2>
-                </div>
-                {topDrop && (
-                  <p className={styles.meta}>{formatDate(topDrop.createdAt)}</p>
+                {topDropError && (
+                  <p className={styles.error}>{topDropError}</p>
                 )}
-              </div>
-
-              {topDropError && (
-                <p className={styles.error}>{topDropError}</p>
-              )}
-              {topDropLoading && !topDrop && !topDropError && (
-                <p>Loading top drop...</p>
-              )}
-              {!topDropLoading && !topDropError && !topDrop && (
-                <p className={styles.emptyState}>
-                  No upgrader wins yet. Win an upgrader attempt to set your top
-                  drop.
-                </p>
-              )}
-              {topDrop && (() => {
-                const skin = topDrop.wonItem.skin;
-                const rarityColor = getSkinRarityColor(skin.rarityColor);
-                const tileStyle = rarityColor
-                  ? ({ "--_rarity": rarityColor } as CSSProperties)
-                  : undefined;
-                const wearLabel = formatWearLabel(skin.exterior);
-                const statusLabel =
-                  topDrop.wonItem.status === "owned"
-                    ? null
-                    : topDrop.wonItem.status === "withdraw_pending"
-                      ? "Pending"
-                      : topDrop.wonItem.status;
-                return (
-                  <div className={styles.topDropContent}>
-                    <div className={styles.topDropPreview}>
-                      <article
-                        className={styles.skinTile}
-                        data-rarity={getSkinRarityKey(skin.rarity)}
-                        style={tileStyle}
-                      >
-                        <div className={styles.skinTileMain}>
-                          <span
-                            className={styles.skinTileBar}
-                            aria-hidden="true"
+                {topDropLoading && !topDrop && !topDropError && (
+                  <p className={styles.profileTopDropEmpty}>
+                    Loading top drop...
+                  </p>
+                )}
+                {!topDropLoading && !topDropError && !topDrop && (
+                  <p className={styles.profileTopDropEmpty}>
+                    No upgrader wins yet. Win an upgrader attempt to set your
+                    top drop.
+                  </p>
+                )}
+                {topDrop && (() => {
+                  const skin = topDrop.wonItem.skin;
+                  const rarityColor = getSkinRarityColor(skin.rarityColor);
+                  const trophyStyle = rarityColor
+                    ? ({ "--_rarity": rarityColor } as CSSProperties)
+                    : undefined;
+                  const wearLabel = formatWearLabel(skin.exterior);
+                  const displayName = formatSkinDisplayName(skin);
+                  const status = topDrop.wonItem.status;
+                  const statusLabel =
+                    status === "owned"
+                      ? "Owned"
+                      : status === "withdraw_pending"
+                        ? "Pending withdrawal"
+                        : status;
+                  const statusChipClass =
+                    status === "owned"
+                      ? `${styles.profileTopDropChip} ${styles.profileTopDropStatusOk}`
+                      : status === "withdraw_pending"
+                        ? `${styles.profileTopDropChip} ${styles.profileTopDropStatusPending}`
+                        : styles.profileTopDropChip;
+                  return (
+                    <div
+                      className={styles.profileTopDropTrophy}
+                      data-rarity={getSkinRarityKey(skin.rarity)}
+                      style={trophyStyle}
+                    >
+                      <div className={styles.profileTopDropImage}>
+                        {skin.imageUrl ? (
+                          <Image
+                            src={skin.imageUrl}
+                            alt={displayName}
+                            fill
+                            sizes="180px"
+                            style={{ objectFit: "contain" }}
                           />
-                          {skin.imageUrl ? (
-                            <div className={styles.skinTileImage}>
-                              <Image
-                                src={skin.imageUrl}
-                                alt={skin.name}
-                                fill
-                                sizes="200px"
-                                style={{ objectFit: "contain" }}
-                              />
-                            </div>
-                          ) : (
-                            <div className={styles.skinTileImagePlaceholder}>
-                              No image
-                            </div>
-                          )}
+                        ) : (
+                          <div className={styles.skinTileImagePlaceholder}>
+                            No image
+                          </div>
+                        )}
+                      </div>
+                      <div className={styles.profileTopDropDetails}>
+                        <p className={styles.profileTopDropName}>
+                          {displayName}
+                        </p>
+                        <p className={styles.profileTopDropValue}>
+                          {formatMoney(topDrop.priceRub, "RUB")}
+                        </p>
+                        <div className={styles.profileTopDropChips}>
                           {wearLabel && (
-                            <span className={styles.skinTileWear}>
+                            <span className={styles.profileTopDropChip}>
                               {wearLabel}
                             </span>
                           )}
-                          {statusLabel && (
-                            <span className={styles.skinTileStatus}>
-                              {statusLabel}
-                            </span>
-                          )}
-                          <div className={styles.skinTileInfo}>
-                            {skin.weapon && (
-                              <span className={styles.skinTileWeapon}>
-                                {skin.weapon}
-                              </span>
-                            )}
-                            <span className={styles.skinTileName}>
-                              {skin.name}
-                            </span>
-                          </div>
+                          <span className={statusChipClass}>
+                            {statusLabel}
+                          </span>
                         </div>
-                      </article>
+                      </div>
                     </div>
-                    <div className={styles.topDropStats}>
-                      <p className={styles.eyebrow}>Value at win</p>
-                      <p className={styles.topDropStatValue}>
-                        {formatMoney(topDrop.priceRub, "RUB")}
-                      </p>
-                      <p className={styles.meta}>
-                        Won {formatDate(topDrop.createdAt)}
-                      </p>
-                      <p className={styles.meta}>
-                        Current status:{" "}
-                        <span className={styles.status}>
-                          {topDrop.wonItem.status}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                );
-              })()}
-            </section>
+                  );
+                })()}
+              </section>
+            </div>
 
             {!FREE_MODE && (
-            <section className={styles.card}>
+            <section className={styles.profileCard}>
               <p className={styles.eyebrow}>Settings</p>
               <h2>Steam trade URL</h2>
               <p className={styles.meta}>
@@ -757,163 +775,302 @@ export default function ProfilePage() {
             </section>
             )}
 
-            <section className={styles.card}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.eyebrow}>Inventory</p>
-                  <h2>My skins</h2>
+            <section
+              className={`${styles.skinContainer} ${styles.profileActivityContainer}`}
+            >
+              <header className={styles.skinContainerHead}>
+                <div
+                  className={styles.invTabs}
+                  role="tablist"
+                  aria-label="Profile activity"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activityTab === "inventory"}
+                    className={
+                      activityTab === "inventory"
+                        ? `${styles.invTab} ${styles.invTabActive}`
+                        : styles.invTab
+                    }
+                    onClick={() => setActivityTab("inventory")}
+                  >
+                    <span>My Skins</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activityTab === "history"}
+                    className={
+                      activityTab === "history"
+                        ? `${styles.invTab} ${styles.invTabActive}`
+                        : styles.invTab
+                    }
+                    onClick={() => setActivityTab("history")}
+                  >
+                    <span>Game History</span>
+                  </button>
                 </div>
-                {!inventoryLoading && (
-                  <p className={styles.meta}>{inventory.length} items</p>
+                <span className={styles.skinContainerCount}>
+                  {activityTab === "inventory"
+                    ? `${inventory.length} items`
+                    : `${upgradeHistoryPagination?.total ?? upgradeHistory.length} attempts`}
+                </span>
+              </header>
+              <div className={styles.skinContainerBody}>
+                {activityTab === "inventory" && (
+                  <div className={styles.profileActivityPane}>
+                    {FREE_MODE ? (
+                      <p className={styles.profileActivityNotice}>
+                        Withdrawals are disabled in free mode.
+                      </p>
+                    ) : (
+                      !user?.steamTradeUrl && (
+                        <p className={styles.profileActivityNotice}>
+                          Save a Steam trade URL above to enable withdrawals.
+                        </p>
+                      )
+                    )}
+
+                    {inventoryActionMessage && (
+                      <p className={styles.tradeUrlStatus}>
+                        {inventoryActionMessage}
+                      </p>
+                    )}
+                    {inventoryActionError && (
+                      <p className={styles.error}>{inventoryActionError}</p>
+                    )}
+                    {inventoryError && (
+                      <p className={styles.error}>{inventoryError}</p>
+                    )}
+
+                    {inventoryLoading && inventory.length === 0 ? (
+                      <p className={styles.skinContainerLoading}>
+                        Loading inventory...
+                      </p>
+                    ) : !inventoryError && inventory.length === 0 ? (
+                      <p className={styles.skinContainerEmpty}>
+                        No skins yet. Buy one from the shop to get started.
+                      </p>
+                    ) : (
+                      <div className={styles.skinTileGrid}>
+                        {inventory.map((item) => {
+                          const isOwned = item.status === "owned";
+                          const isSelling = sellingItemId === item.id;
+                          const isWithdrawing = withdrawingItemId === item.id;
+                          const statusLabel =
+                            item.status === "withdraw_pending"
+                              ? "Pending"
+                              : item.status === "owned"
+                                ? null
+                                : item.status;
+                          const tileClasses = [styles.skinTile];
+                          if (!isOwned)
+                            tileClasses.push(styles.skinTileDisabled);
+                          const rarityColor = getSkinRarityColor(
+                            item.skin.rarityColor,
+                          );
+                          const tileStyle = rarityColor
+                            ? ({ "--_rarity": rarityColor } as CSSProperties)
+                            : undefined;
+                          return (
+                            <article
+                              key={item.id}
+                              className={tileClasses.join(" ")}
+                              data-rarity={getSkinRarityKey(item.skin.rarity)}
+                              style={tileStyle}
+                            >
+                              <div className={styles.skinTileMain}>
+                                <span
+                                  className={styles.skinTileBar}
+                                  aria-hidden="true"
+                                />
+                                {item.skin.imageUrl ? (
+                                  <div className={styles.skinTileImage}>
+                                    <Image
+                                      src={item.skin.imageUrl}
+                                      alt={item.skin.name}
+                                      fill
+                                      sizes="(max-width: 540px) 50vw, (max-width: 1200px) 33vw, 25vw"
+                                      style={{ objectFit: "contain" }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div
+                                    className={styles.skinTileImagePlaceholder}
+                                  >
+                                    No image
+                                  </div>
+                                )}
+                                {formatWearLabel(item.skin.exterior) && (
+                                  <span className={styles.skinTileWear}>
+                                    {formatWearLabel(item.skin.exterior)}
+                                  </span>
+                                )}
+                                {statusLabel && (
+                                  <span className={styles.skinTileStatus}>
+                                    {statusLabel}
+                                  </span>
+                                )}
+                                <div className={styles.skinTileInfo}>
+                                  {item.skin.weapon && (
+                                    <span className={styles.skinTileWeapon}>
+                                      {item.skin.weapon}
+                                    </span>
+                                  )}
+                                  <span className={styles.skinTileName}>
+                                    {item.skin.name}
+                                  </span>
+                                  <span className={styles.skinTilePrice}>
+                                    {formatMoney(item.sellPriceRub, "RUB")}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className={styles.skinTileActions}>
+                                <button
+                                  type="button"
+                                  className={styles.skinTileActionBtn}
+                                  disabled={
+                                    !isOwned || isSelling || isWithdrawing
+                                  }
+                                  onClick={() => sellInventoryItem(item.id)}
+                                  title={`Sell for ${formatMoney(
+                                    item.sellPriceRub,
+                                    "RUB",
+                                  )}`}
+                                >
+                                  {isSelling ? "Selling..." : "Sell"}
+                                </button>
+                                {!FREE_MODE && (
+                                  <button
+                                    type="button"
+                                    className={`${styles.skinTileActionBtn} ${styles.skinTileActionDanger}`}
+                                    disabled={
+                                      !isOwned ||
+                                      isSelling ||
+                                      isWithdrawing ||
+                                      !user.steamTradeUrl
+                                    }
+                                    onClick={() =>
+                                      withdrawInventoryItem(item.id)
+                                    }
+                                    title={
+                                      user.steamTradeUrl
+                                        ? "Withdraw to Steam"
+                                        : "Save a Steam trade URL to enable withdrawals"
+                                    }
+                                  >
+                                    {isWithdrawing
+                                      ? "Withdrawing..."
+                                      : "Withdraw"}
+                                  </button>
+                                )}
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activityTab === "history" && (
+                  <div
+                    className={`${styles.profileActivityPane} ${styles.profileHistoryPane}`}
+                  >
+                    {upgradeHistoryError && (
+                      <p className={styles.error}>{upgradeHistoryError}</p>
+                    )}
+                    {upgradeHistoryLoading &&
+                      upgradeHistory.length === 0 && (
+                        <p className={styles.skinContainerLoading}>
+                          Loading history...
+                        </p>
+                      )}
+                    {!upgradeHistoryLoading &&
+                      !upgradeHistoryError &&
+                      upgradeHistory.length === 0 && (
+                        <p className={styles.skinContainerEmpty}>
+                          No upgrade attempts yet.
+                        </p>
+                      )}
+                    {upgradeHistory.length > 0 && (
+                      <ul className={styles.upgradeHistoryList}>
+                        {upgradeHistory.map((attempt) => {
+                          const sourceName =
+                            attempt.sourceItem?.skin?.name ?? "Unknown skin";
+                          const targetName =
+                            attempt.targetSkin?.name ?? "Unknown skin";
+                          const wonName = attempt.wonItem?.skin?.name;
+                          const resultClass =
+                            attempt.result === "win"
+                              ? `${styles.status} ${styles.upgradeHistoryResultWin}`
+                              : `${styles.status} ${styles.upgradeHistoryResultLoss}`;
+
+                          return (
+                            <li
+                              className={styles.upgradeHistoryItem}
+                              key={attempt.id}
+                            >
+                              <div className={styles.upgradeHistoryMain}>
+                                <span className={resultClass}>
+                                  {attempt.result === "win" ? "Won" : "Lost"}
+                                </span>
+                                <strong>{sourceName}</strong>
+                                <span className={styles.meta}>→</span>
+                                <strong>{targetName}</strong>
+                              </div>
+                              <div className={styles.upgradeHistoryDetails}>
+                                <span>
+                                  Source{" "}
+                                  {formatMoney(attempt.sourceValueRub, "RUB")}
+                                </span>
+                                <span>
+                                  Target{" "}
+                                  {formatMoney(attempt.targetPriceRub, "RUB")}
+                                </span>
+                                <span>
+                                  Chance{" "}
+                                  {Number(
+                                    attempt.displayedChancePercent,
+                                  ).toFixed(2)}
+                                  %
+                                </span>
+                                <span>{formatDate(attempt.createdAt)}</span>
+                                {attempt.result === "win" && wonName && (
+                                  <span>Won {wonName}</span>
+                                )}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                    {upgradeHistoryPagination &&
+                      upgradeHistoryPagination.page <
+                        upgradeHistoryPagination.totalPages && (
+                        <button
+                          type="button"
+                          className={`${styles.actionButton} ${styles.profileHistoryLoadMore}`}
+                          disabled={upgradeHistoryLoading}
+                          onClick={() =>
+                            loadUpgradeHistory(
+                              upgradeHistoryPagination.page + 1,
+                            )
+                          }
+                        >
+                          {upgradeHistoryLoading
+                            ? "Loading..."
+                            : "Load more"}
+                        </button>
+                      )}
+                  </div>
                 )}
               </div>
-
-              {FREE_MODE ? (
-                <p className={styles.meta}>
-                  Withdrawals are disabled in free mode.
-                </p>
-              ) : (
-                !user?.steamTradeUrl && (
-                  <p className={styles.meta}>
-                    Save a Steam trade URL above to enable withdrawals.
-                  </p>
-                )
-              )}
-
-              {inventoryActionMessage && (
-                <p className={styles.tradeUrlStatus}>
-                  {inventoryActionMessage}
-                </p>
-              )}
-              {inventoryActionError && (
-                <p className={styles.error}>{inventoryActionError}</p>
-              )}
-              {inventoryError && (
-                <p className={styles.error}>{inventoryError}</p>
-              )}
-
-              {inventoryLoading && inventory.length === 0 ? (
-                <p>Loading inventory...</p>
-              ) : !inventoryError && inventory.length === 0 ? (
-                <p className={styles.emptyState}>
-                  No skins yet. Buy one from the shop to get started.
-                </p>
-              ) : (
-                <div className={styles.skinTileGrid}>
-                  {inventory.map((item) => {
-                    const isOwned = item.status === "owned";
-                    const isSelling = sellingItemId === item.id;
-                    const isWithdrawing = withdrawingItemId === item.id;
-                    const statusLabel =
-                      item.status === "withdraw_pending"
-                        ? "Pending"
-                        : item.status === "owned"
-                          ? null
-                          : item.status;
-                    const tileClasses = [styles.skinTile];
-                    if (!isOwned) tileClasses.push(styles.skinTileDisabled);
-                    const rarityColor = getSkinRarityColor(
-                      item.skin.rarityColor,
-                    );
-                    const tileStyle = rarityColor
-                      ? ({ "--_rarity": rarityColor } as CSSProperties)
-                      : undefined;
-                    return (
-                      <article
-                        key={item.id}
-                        className={tileClasses.join(" ")}
-                        data-rarity={getSkinRarityKey(item.skin.rarity)}
-                        style={tileStyle}
-                      >
-                        <div className={styles.skinTileMain}>
-                          <span
-                            className={styles.skinTileBar}
-                            aria-hidden="true"
-                          />
-                          {item.skin.imageUrl ? (
-                            <div className={styles.skinTileImage}>
-                              <Image
-                                src={item.skin.imageUrl}
-                                alt={item.skin.name}
-                                fill
-                                sizes="(max-width: 540px) 50vw, (max-width: 1200px) 33vw, 25vw"
-                                style={{ objectFit: "contain" }}
-                              />
-                            </div>
-                          ) : (
-                            <div className={styles.skinTileImagePlaceholder}>
-                              No image
-                            </div>
-                          )}
-                          {formatWearLabel(item.skin.exterior) && (
-                            <span className={styles.skinTileWear}>
-                              {formatWearLabel(item.skin.exterior)}
-                            </span>
-                          )}
-                          {statusLabel && (
-                            <span className={styles.skinTileStatus}>
-                              {statusLabel}
-                            </span>
-                          )}
-                          <div className={styles.skinTileInfo}>
-                            {item.skin.weapon && (
-                              <span className={styles.skinTileWeapon}>
-                                {item.skin.weapon}
-                              </span>
-                            )}
-                            <span className={styles.skinTileName}>
-                              {item.skin.name}
-                            </span>
-                            <span className={styles.skinTilePrice}>
-                              {formatMoney(item.sellPriceRub, "RUB")}
-                            </span>
-                          </div>
-                        </div>
-                        <div className={styles.skinTileActions}>
-                          <button
-                            type="button"
-                            className={styles.skinTileActionBtn}
-                            disabled={
-                              !isOwned || isSelling || isWithdrawing
-                            }
-                            onClick={() => sellInventoryItem(item.id)}
-                            title={`Sell for ${formatMoney(
-                              item.sellPriceRub,
-                              "RUB",
-                            )}`}
-                          >
-                            {isSelling ? "Selling..." : "Sell"}
-                          </button>
-                          {!FREE_MODE && (
-                            <button
-                              type="button"
-                              className={`${styles.skinTileActionBtn} ${styles.skinTileActionDanger}`}
-                              disabled={
-                                !isOwned ||
-                                isSelling ||
-                                isWithdrawing ||
-                                !user.steamTradeUrl
-                              }
-                              onClick={() => withdrawInventoryItem(item.id)}
-                              title={
-                                user.steamTradeUrl
-                                  ? "Withdraw to Steam"
-                                  : "Save a Steam trade URL to enable withdrawals"
-                              }
-                            >
-                              {isWithdrawing ? "Withdrawing..." : "Withdraw"}
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
             </section>
 
             {!FREE_MODE && (
-              <section className={styles.card}>
+              <section className={styles.profileCard}>
                 <div className={styles.sectionHeader}>
                   <div>
                     <p className={styles.eyebrow}>Wallet</p>
@@ -928,7 +1085,9 @@ export default function ProfilePage() {
                   </button>
                 </div>
 
-                {walletLoading && !wallet && <p>Loading deposits...</p>}
+                {walletLoading && !wallet && (
+                  <p className={styles.meta}>Loading deposits...</p>
+                )}
                 {wallet &&
                   (wallet.deposits.length > 0 ? (
                     <ul className={styles.depositList}>
@@ -951,95 +1110,6 @@ export default function ProfilePage() {
                   ))}
               </section>
             )}
-
-            <section className={styles.card}>
-              <div className={styles.sectionHeader}>
-                <div>
-                  <p className={styles.eyebrow}>History</p>
-                  <h2>Upgrade history</h2>
-                </div>
-                {upgradeHistoryPagination && (
-                  <p className={styles.meta}>
-                    {upgradeHistoryPagination.total} attempts
-                  </p>
-                )}
-              </div>
-
-              {upgradeHistoryError && (
-                <p className={styles.error}>{upgradeHistoryError}</p>
-              )}
-              {upgradeHistoryLoading && upgradeHistory.length === 0 && (
-                <p>Loading history...</p>
-              )}
-              {!upgradeHistoryLoading &&
-                !upgradeHistoryError &&
-                upgradeHistory.length === 0 && (
-                  <p className={styles.emptyState}>
-                    No upgrade attempts yet.
-                  </p>
-                )}
-              {upgradeHistory.length > 0 && (
-                <ul className={styles.upgradeHistoryList}>
-                  {upgradeHistory.map((attempt) => {
-                    const sourceName =
-                      attempt.sourceItem?.skin?.name ?? "Unknown skin";
-                    const targetName =
-                      attempt.targetSkin?.name ?? "Unknown skin";
-                    const wonName = attempt.wonItem?.skin?.name;
-                    const resultClass =
-                      attempt.result === "win"
-                        ? `${styles.status} ${styles.upgradeHistoryResultWin}`
-                        : `${styles.status} ${styles.upgradeHistoryResultLoss}`;
-
-                    return (
-                      <li
-                        className={styles.upgradeHistoryItem}
-                        key={attempt.id}
-                      >
-                        <div className={styles.upgradeHistoryMain}>
-                          <span className={resultClass}>
-                            {attempt.result === "win" ? "Won" : "Lost"}
-                          </span>
-                          <strong>{sourceName}</strong>
-                          <span className={styles.meta}>→</span>
-                          <strong>{targetName}</strong>
-                        </div>
-                        <div className={styles.upgradeHistoryDetails}>
-                          <span>
-                            Source {formatMoney(attempt.sourceValueRub, "RUB")}
-                          </span>
-                          <span>
-                            Target {formatMoney(attempt.targetPriceRub, "RUB")}
-                          </span>
-                          <span>
-                            Chance{" "}
-                            {Number(attempt.displayedChancePercent).toFixed(2)}%
-                          </span>
-                          <span>{formatDate(attempt.createdAt)}</span>
-                          {attempt.result === "win" && wonName && (
-                            <span>Won {wonName}</span>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {upgradeHistoryPagination &&
-                upgradeHistoryPagination.page <
-                  upgradeHistoryPagination.totalPages && (
-                  <button
-                    type="button"
-                    className={styles.actionButton}
-                    disabled={upgradeHistoryLoading}
-                    onClick={() =>
-                      loadUpgradeHistory(upgradeHistoryPagination.page + 1)
-                    }
-                  >
-                    {upgradeHistoryLoading ? "Loading..." : "Load more"}
-                  </button>
-                )}
-            </section>
           </div>
         )}
       </main>
